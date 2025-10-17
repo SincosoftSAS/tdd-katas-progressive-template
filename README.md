@@ -1,43 +1,141 @@
-# íº€ TDD Journey - Progressive Katas
+# ğŸ¯ TDD Journey - Progressive Katas# ï¿½ï¿½ï¿½ TDD Journey - Progressive Katas
 
-Welcome to your personal TDD learning journey!
 
-## í¾¯ What is This?
 
-Complete coding katas one at a time, unlocking new ones as you progress.
+Welcome to your personal TDD learning journey!Welcome to your personal TDD learning journey!
 
-## í³Š Your Progress
 
-### âœ… Completed Katas
-_No katas completed yet. Start with Kata 01!_
 
-### í´“ Available Katas
-1. **Kata 01: FizzBuzz** - Start here!
+## ğŸ“– What is This?## ï¿½ï¿½ï¿½ What is This?
 
-### í´’ Locked Katas
-_Complete current kata to unlock the next one..._
 
-## íº€ Getting Started
 
-```bash
+Complete coding katas one at a time, unlocking new ones as you progress.Complete coding katas one at a time, unlocking new ones as you progress.
+
+
+
+## ğŸ“Š Your Progress## ï¿½ï¿½ï¿½ Your Progress
+
+
+
+### âœ… Completed Katas### âœ… Completed Katas
+
+_No katas completed yet. Start with Kata 01!__No katas completed yet. Start with Kata 01!_
+
+
+
+### ğŸ”“ Current Kata### ï¿½ï¿½ï¿½ Available Katas
+
+**Kata 01: FizzBuzz** - You're here! ğŸ¯1. **Kata 01: FizzBuzz** - Start here!
+
+
+
+### ğŸ”’ Locked Katas### ï¿½ï¿½ï¿½ Locked Katas
+
+_Complete current kata to unlock the next one...__Complete current kata to unlock the next one..._
+
+
+
+---## ï¿½ï¿½ï¿½ Getting Started
+
+
+
+## ğŸš€ Getting Started```bash
+
 # Clone this repository
-git clone YOUR_REPO_URL
+
+You're already in the right place! This repository contains **Kata 01: FizzBuzz**.git clone YOUR_REPO_URL
+
 cd YOUR_REPO
 
-# Switch to first kata
-git checkout kata-01-fizzbuzz
+### Prerequisites
 
-# Read instructions
+- .NET 8.0 SDK or later# Switch to first kata
+
+- Your favorite code editor (VS Code, Visual Studio, Rider, etc.)git checkout kata-01-fizzbuzz
+
+
+
+### Setup# Read instructions
+
 cat katas/01-fizzbuzz/README.md
+
+```bash```
+
+# Restore dependencies
+
+dotnet restore## ï¿½ï¿½ï¿½ Working on a Kata
+
+
+
+# Build the project1. Switch to kata branch
+
+dotnet build2. Read README.md
+
+3. Follow TDD (Red â†’ Green â†’ Refactor)
+
+# Run tests (they should fail initially - that's expected!)4. Run tests locally
+
+dotnet test5. Push for evaluation
+
+```6. Next kata unlocks automatically!
+
+
+
+---Happy coding! ï¿½ï¿½ï¿½ï¿½ï¿½
+
+
+## ğŸ“– Kata Instructions
+
+Read the complete instructions here:
+- **File**: `.github/kata-definitions/kata-01-fizzbuzz.md`
+- Or view it on GitHub in your repository
+
+**Quick Summary**: Implement a function that returns a list from 1 to n, replacing multiples of 3 with "Fizz", multiples of 5 with "Buzz", and multiples of 15 with "FizzBuzz".
+
+---
+
+## ğŸ’» Working on This Kata
+
+### TDD Workflow (Red â†’ Green â†’ Refactor)
+
+1. **Read the requirements** in `.github/kata-definitions/kata-01-fizzbuzz.md`
+2. **Run tests**: `dotnet test` (they should fail - Red âŒ)
+3. **Write minimal code** in `FizzBuzz/FizzBuzz.cs` to make tests pass
+4. **Run tests again**: `dotnet test` (they should pass - Green âœ…)
+5. **Refactor** your code to improve it
+6. **Repeat** until all requirements are met
+
+### Files to Edit
+
+- `FizzBuzz/FizzBuzz.cs` - Your implementation goes here
+- `FizzBuzz.Tests/FizzBuzzTests.cs` - Add more tests as you progress
+
+### When You're Done
+
+```bash
+# Commit your work
+git add .
+git commit -m "Implement FizzBuzz kata"
+
+# Push to trigger evaluation
+git push origin master
 ```
 
-## í³š Working on a Kata
+**GitHub Actions** will:
+- âœ… Run your tests
+- âœ… Run additional hidden tests
+- âœ… If all pass: Unlock Kata 02 automatically! ğŸ‰
 
-1. Switch to kata branch
-2. Read README.md
-3. Follow TDD (Red â†’ Green â†’ Refactor)
-4. Run tests locally
-5. Push for evaluation
-6. Next kata unlocks automatically!
+---
 
-Happy coding! ï¿½ï¿½í²ª
+## ğŸ“ Learning Objectives
+
+- Practice Test-Driven Development (TDD)
+- Learn the Red-Green-Refactor cycle
+- Experience incremental development
+- Build confidence with automated testing
+
+---
+
+Happy coding! ğŸš€ğŸ’ª
