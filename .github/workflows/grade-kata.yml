@@ -36,68 +36,24 @@ jobs:
           
           echo "🎯 Evaluating Kata #$KATA_NUMBER: $KATA_NAME"
       
-      - name: Determine kata type
-        id: kata_type
-        env:
-          KATA_NUMBER: ${{ steps.detect.outputs.kata_number }}
-        run: |
-          # Kata 01 is JavaScript, Kata 02+ is C#
-          if [ "$KATA_NUMBER" == "01" ]; then
-            echo "type=javascript" >> $GITHUB_OUTPUT
-            echo "📦 JavaScript kata detected"
-          else
-            echo "type=csharp" >> $GITHUB_OUTPUT
-            echo "📦 C# kata detected"
-          fi
-      
-      # ========== JAVASCRIPT PATH (Kata 01: FizzBuzz) ==========
-      
-      - name: Setup Node.js
-        if: steps.kata_type.outputs.type == 'javascript'
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-      
-      - name: Install dependencies (JavaScript)
-        if: steps.kata_type.outputs.type == 'javascript'
-        run: |
-          if [ -f package.json ]; then
-            npm install
-          else
-            echo "⚠️ No package.json found"
-          fi
-      
-      - name: Run tests (JavaScript)
-        if: steps.kata_type.outputs.type == 'javascript'
-        id: test_js
-        continue-on-error: true
-        run: |
-          npm test 2>&1 | tee test-output.txt
-          
-          if [ ${PIPESTATUS[0]} -eq 0 ]; then
-            echo "result=success" >> $GITHUB_OUTPUT
-            echo "✅ All JavaScript tests passed!"
-          else
-            echo "result=failure" >> $GITHUB_OUTPUT
-            echo "❌ Some JavaScript tests failed"
-          fi
-      
-      # ========== C# PATH (Kata 02+: String Calculator, etc.) ==========
+      # ========== C# TESTING WORKFLOW ==========
       
       - name: Setup .NET
-        if: steps.kata_type.outputs.type == 'csharp'
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
       
       - name: Download hidden tests (C#)
-        if: steps.kata_type.outputs.type == 'csharp'
         env:
           KATA_NUMBER: ${{ steps.detect.outputs.kata_number }}
           KATA_NAME: ${{ steps.detect.outputs.kata_name }}
           REPO_OWNER: ${{ github.repository_owner }}
         run: |
           echo "📦 Downloading hidden tests for Kata $KATA_NUMBER..."
+          
+          # Determine project name from kata name (capitalize first letter)
+          PROJECT_NAME=$(echo $KATA_NAME | sed 's/\b\(.\)/\u\1/g' | sed 's/-//g')
+          echo "Project name: $PROJECT_NAME"
           
           # Try to download HiddenTests.cs
           HTTP_CODE=$(curl -L -w "%{http_code}" -o HiddenTests.cs \
@@ -106,17 +62,17 @@ jobs:
           if [ "$HTTP_CODE" == "200" ] && [ -f HiddenTests.cs ]; then
             echo "✅ Hidden tests downloaded successfully"
             
-            # Download .csproj file
-            curl -L "https://raw.githubusercontent.com/$REPO_OWNER/tdd-katas-progressive-template/main/.github/ci-tests/kata-$KATA_NUMBER-$KATA_NAME/StringCalculator.HiddenTests.csproj" \
+            # Download .csproj file - try both generic and specific names
+            curl -L "https://raw.githubusercontent.com/$REPO_OWNER/tdd-katas-progressive-template/main/.github/ci-tests/kata-$KATA_NUMBER-$KATA_NAME/$PROJECT_NAME.HiddenTests.csproj" \
               -o HiddenTests.csproj
             
-            # Create hidden tests project
-            mkdir -p StringCalculator.HiddenTests
-            mv HiddenTests.cs HiddenTests.csproj StringCalculator.HiddenTests/
+            # Create hidden tests project directory
+            mkdir -p $PROJECT_NAME.HiddenTests
+            mv HiddenTests.cs HiddenTests.csproj $PROJECT_NAME.HiddenTests/
             
             # Add to solution if exists
-            if [ -f *.sln ]; then
-              dotnet sln add StringCalculator.HiddenTests/HiddenTests.csproj 2>/dev/null || true
+            if ls *.sln 1> /dev/null 2>&1; then
+              dotnet sln add $PROJECT_NAME.HiddenTests/HiddenTests.csproj 2>/dev/null || true
             fi
             
             echo "has_hidden_tests=true" >> $GITHUB_ENV
@@ -126,7 +82,6 @@ jobs:
           fi
       
       - name: Build and test (C#)
-        if: steps.kata_type.outputs.type == 'csharp'
         id: test_csharp
         continue-on-error: true
         run: |
@@ -150,11 +105,7 @@ jobs:
       - name: Determine test result
         id: test
         run: |
-          if [ "${{ steps.kata_type.outputs.type }}" == "javascript" ]; then
-            echo "result=${{ steps.test_js.outputs.result }}" >> $GITHUB_OUTPUT
-          else
-            echo "result=${{ steps.test_csharp.outputs.result }}" >> $GITHUB_OUTPUT
-          fi
+          echo "result=${{ steps.test_csharp.outputs.result }}" >> $GITHUB_OUTPUT
       
       - name: Update progress tracking
         if: steps.test.outputs.result == 'success'
@@ -208,7 +159,7 @@ jobs:
           echo "📊 Kata Evaluation Summary"
           echo "========================================"
           echo "Kata: #${{ steps.detect.outputs.kata_number }} - ${{ steps.detect.outputs.kata_name }}"
-          echo "Type: ${{ steps.kata_type.outputs.type }}"
+          echo "Type: C# (.NET 8.0)"
           echo "Branch: ${{ steps.detect.outputs.branch_name }}"
           echo ""
           
