@@ -1,0 +1,25 @@
+# Dependencies
+node_modules/
+package-lock.json
+
+# .NET
+bin/
+obj/
+*.user
+[Dd]ebug/
+[Rr]elease/
+
+# IDEs
+.vscode/
+.idea/
+.DS_Store
+
+# Tests ocultos (students should NOT have this)
+.github/ci-tests/
+
+# Progress tracking
+.kata-progress.json
+
+# Temporary files
+pr-body.md
+test-output.txt

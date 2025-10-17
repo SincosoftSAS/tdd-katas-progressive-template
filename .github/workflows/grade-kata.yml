@@ -1,0 +1,242 @@
+name: Grade Kata
+
+on:
+  push:
+    branches:
+      - 'kata-**'
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  grade:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout student code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Detect kata from branch name
+        id: detect
+        run: |
+          BRANCH=${GITHUB_REF#refs/heads/}
+          echo "branch_name=$BRANCH" >> $GITHUB_OUTPUT
+          
+          # Extract kata number (e.g., kata-01-fizzbuzz → 01)
+          KATA_NUMBER=$(echo $BRANCH | grep -oP 'kata-\K\d+')
+          echo "kata_number=$KATA_NUMBER" >> $GITHUB_OUTPUT
+          
+          # Extract kata name (e.g., kata-01-fizzbuzz → fizzbuzz)
+          KATA_NAME=$(echo $BRANCH | sed 's/^kata-[0-9]*-//')
+          echo "kata_name=$KATA_NAME" >> $GITHUB_OUTPUT
+          
+          echo "🎯 Evaluating Kata #$KATA_NUMBER: $KATA_NAME"
+      
+      - name: Determine kata type
+        id: kata_type
+        env:
+          KATA_NUMBER: ${{ steps.detect.outputs.kata_number }}
+        run: |
+          # Kata 01 is JavaScript, Kata 02+ is C#
+          if [ "$KATA_NUMBER" == "01" ]; then
+            echo "type=javascript" >> $GITHUB_OUTPUT
+            echo "📦 JavaScript kata detected"
+          else
+            echo "type=csharp" >> $GITHUB_OUTPUT
+            echo "📦 C# kata detected"
+          fi
+      
+      # ========== JAVASCRIPT PATH (Kata 01: FizzBuzz) ==========
+      
+      - name: Setup Node.js
+        if: steps.kata_type.outputs.type == 'javascript'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      
+      - name: Install dependencies (JavaScript)
+        if: steps.kata_type.outputs.type == 'javascript'
+        run: |
+          if [ -f package.json ]; then
+            npm install
+          else
+            echo "⚠️ No package.json found"
+          fi
+      
+      - name: Run tests (JavaScript)
+        if: steps.kata_type.outputs.type == 'javascript'
+        id: test_js
+        continue-on-error: true
+        run: |
+          npm test 2>&1 | tee test-output.txt
+          
+          if [ ${PIPESTATUS[0]} -eq 0 ]; then
+            echo "result=success" >> $GITHUB_OUTPUT
+            echo "✅ All JavaScript tests passed!"
+          else
+            echo "result=failure" >> $GITHUB_OUTPUT
+            echo "❌ Some JavaScript tests failed"
+          fi
+      
+      # ========== C# PATH (Kata 02+: String Calculator, etc.) ==========
+      
+      - name: Setup .NET
+        if: steps.kata_type.outputs.type == 'csharp'
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      
+      - name: Download hidden tests (C#)
+        if: steps.kata_type.outputs.type == 'csharp'
+        env:
+          KATA_NUMBER: ${{ steps.detect.outputs.kata_number }}
+          KATA_NAME: ${{ steps.detect.outputs.kata_name }}
+          REPO_OWNER: ${{ github.repository_owner }}
+        run: |
+          echo "📦 Downloading hidden tests for Kata $KATA_NUMBER..."
+          
+          # Try to download HiddenTests.cs
+          HTTP_CODE=$(curl -L -w "%{http_code}" -o HiddenTests.cs \
+            "https://raw.githubusercontent.com/$REPO_OWNER/tdd-katas-progressive-template/main/.github/ci-tests/kata-$KATA_NUMBER-$KATA_NAME/HiddenTests.cs")
+          
+          if [ "$HTTP_CODE" == "200" ] && [ -f HiddenTests.cs ]; then
+            echo "✅ Hidden tests downloaded successfully"
+            
+            # Download .csproj file
+            curl -L "https://raw.githubusercontent.com/$REPO_OWNER/tdd-katas-progressive-template/main/.github/ci-tests/kata-$KATA_NUMBER-$KATA_NAME/StringCalculator.HiddenTests.csproj" \
+              -o HiddenTests.csproj
+            
+            # Create hidden tests project
+            mkdir -p StringCalculator.HiddenTests
+            mv HiddenTests.cs HiddenTests.csproj StringCalculator.HiddenTests/
+            
+            # Add to solution if exists
+            if [ -f *.sln ]; then
+              dotnet sln add StringCalculator.HiddenTests/HiddenTests.csproj 2>/dev/null || true
+            fi
+            
+            echo "has_hidden_tests=true" >> $GITHUB_ENV
+          else
+            echo "ℹ️ No hidden tests found for this kata (HTTP $HTTP_CODE)"
+            echo "has_hidden_tests=false" >> $GITHUB_ENV
+          fi
+      
+      - name: Build and test (C#)
+        if: steps.kata_type.outputs.type == 'csharp'
+        id: test_csharp
+        continue-on-error: true
+        run: |
+          echo "🔨 Building project..."
+          dotnet restore
+          dotnet build --no-restore
+          
+          echo "🧪 Running tests..."
+          dotnet test --no-build --verbosity normal 2>&1 | tee test-output.txt
+          
+          if [ ${PIPESTATUS[0]} -eq 0 ]; then
+            echo "result=success" >> $GITHUB_OUTPUT
+            echo "✅ All C# tests passed!"
+          else
+            echo "result=failure" >> $GITHUB_OUTPUT
+            echo "❌ Some C# tests failed"
+          fi
+      
+      # ========== COMMON: Update Progress ==========
+      
+      - name: Determine test result
+        id: test
+        run: |
+          if [ "${{ steps.kata_type.outputs.type }}" == "javascript" ]; then
+            echo "result=${{ steps.test_js.outputs.result }}" >> $GITHUB_OUTPUT
+          else
+            echo "result=${{ steps.test_csharp.outputs.result }}" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Update progress tracking
+        if: steps.test.outputs.result == 'success'
+        env:
+          KATA_NUMBER: ${{ steps.detect.outputs.kata_number }}
+        run: |
+          git config user.name "GitHub Actions Bot"
+          git config user.email "actions@github.com"
+          
+          # Create or update .kata-progress.json
+          if [ -f .kata-progress.json ]; then
+            PROGRESS=$(cat .kata-progress.json)
+          else
+            PROGRESS='{"completed":[],"current":1,"last_completed_date":""}'
+          fi
+          
+          # Add completed kata and update current
+          CURRENT_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          echo $PROGRESS | jq ".completed += [$KATA_NUMBER] | .completed |= unique | sort | .current = ($KATA_NUMBER + 1) | .last_completed_date = \"$CURRENT_DATE\"" > .kata-progress.json
+          
+          git add .kata-progress.json
+          git commit -m "✅ Kata $KATA_NUMBER completed! 🎉 [skip ci]" || true
+          git push origin ${{ steps.detect.outputs.branch_name }}
+          
+          echo "📊 Progress updated successfully"
+      
+      - name: Trigger unlock next kata
+        if: steps.test.outputs.result == 'success'
+        run: |
+          echo "🔓 Triggering unlock workflow for next kata..."
+          
+          # Trigger via repository dispatch
+          curl -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            https://api.github.com/repos/${{ github.repository }}/dispatches \
+            -d '{
+              "event_type": "unlock-next-kata",
+              "client_payload": {
+                "completed_kata": "${{ steps.detect.outputs.kata_number }}",
+                "kata_name": "${{ steps.detect.outputs.kata_name }}",
+                "student_branch": "${{ steps.detect.outputs.branch_name }}"
+              }
+            }'
+      
+      - name: Report results
+        if: always()
+        run: |
+          echo "========================================"
+          echo "📊 Kata Evaluation Summary"
+          echo "========================================"
+          echo "Kata: #${{ steps.detect.outputs.kata_number }} - ${{ steps.detect.outputs.kata_name }}"
+          echo "Type: ${{ steps.kata_type.outputs.type }}"
+          echo "Branch: ${{ steps.detect.outputs.branch_name }}"
+          echo ""
+          
+          if [ "${{ steps.test.outputs.result }}" == "success" ]; then
+            echo "✅ STATUS: COMPLETED! 🎉"
+            echo ""
+            echo "🎓 Congratulations! All tests passed."
+            echo "🔓 Next kata will be unlocked automatically..."
+            echo ""
+            echo "⏳ Wait for the unlock workflow to complete."
+            echo "📬 You'll receive a notification when the next kata is ready."
+          else
+            echo "⏳ STATUS: IN PROGRESS"
+            echo ""
+            echo "📝 Some tests are still failing. Keep working!"
+            echo "💡 Tips:"
+            echo "   - Review the test output above"
+            echo "   - Follow TDD: Red → Green → Refactor"
+            echo "   - Run tests locally before pushing"
+            echo ""
+            echo "🔄 Push again when ready to re-evaluate."
+          fi
+          echo "========================================"
+      
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-kata-${{ steps.detect.outputs.kata_number }}
+          path: test-output.txt
+          if-no-files-found: ignore

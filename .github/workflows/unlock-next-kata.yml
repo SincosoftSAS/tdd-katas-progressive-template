@@ -1,0 +1,202 @@
+name: Unlock Next Kata
+
+on:
+  repository_dispatch:
+    types: [unlock-next-kata]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  unlock:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Extract event data
+        id: event
+        run: |
+          echo "completed_kata=${{ github.event.client_payload.completed_kata }}" >> $GITHUB_OUTPUT
+          echo "kata_name=${{ github.event.client_payload.kata_name }}" >> $GITHUB_OUTPUT
+          
+          echo "✅ Kata ${{ github.event.client_payload.completed_kata }} completed: ${{ github.event.client_payload.kata_name }}"
+      
+      - name: Calculate next kata
+        id: next
+        env:
+          COMPLETED: ${{ steps.event.outputs.completed_kata }}
+        run: |
+          NEXT_KATA=$(printf "%02d" $((10#$COMPLETED + 1)))
+          echo "next_kata=$NEXT_KATA" >> $GITHUB_OUTPUT
+          echo "🔓 Preparing to unlock Kata #$NEXT_KATA"
+      
+      - name: Check if next kata exists
+        id: check
+        env:
+          NEXT_KATA: ${{ steps.next.outputs.next_kata }}
+          REPO_OWNER: ${{ github.repository_owner }}
+        run: |
+          echo "🔍 Searching for kata definition files..."
+          
+          SEARCH_URL="https://api.github.com/repos/$REPO_OWNER/tdd-katas-progressive-template/contents/.github/kata-definitions"
+          
+          echo "Searching in: $SEARCH_URL"
+          
+          FILES=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github+json" \
+            "$SEARCH_URL" | jq -r '.[].name')
+          
+          echo "Available files:"
+          echo "$FILES"
+          
+          KATA_FILE=$(echo "$FILES" | grep "^kata-$NEXT_KATA-.*\.md$" | head -1)
+          
+          if [ -n "$KATA_FILE" ]; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "filename=$KATA_FILE" >> $GITHUB_OUTPUT
+            
+            KATA_NAME=$(echo "$KATA_FILE" | sed -E "s/^kata-$NEXT_KATA-(.*)\.md$/\1/")
+            echo "kata_name=$KATA_NAME" >> $GITHUB_OUTPUT
+            
+            echo "✅ Found next kata: $KATA_FILE (name: $KATA_NAME)"
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "🎓 No more katas available. All katas completed!"
+          fi
+      
+      - name: Download next kata definition
+        if: steps.check.outputs.exists == 'true'
+        env:
+          NEXT_KATA: ${{ steps.next.outputs.next_kata }}
+          KATA_NAME: ${{ steps.check.outputs.kata_name }}
+          KATA_FILE: ${{ steps.check.outputs.filename }}
+          REPO_OWNER: ${{ github.repository_owner }}
+        run: |
+          echo "📥 Downloading kata definition: $KATA_FILE"
+          
+          curl -L -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            "https://raw.githubusercontent.com/$REPO_OWNER/tdd-katas-progressive-template/main/.github/kata-definitions/$KATA_FILE" \
+            -o kata-definition.md
+          
+          if [ ! -f kata-definition.md ]; then
+            echo "❌ Failed to download kata definition"
+            exit 1
+          fi
+          
+          mkdir -p "katas/$NEXT_KATA-$KATA_NAME"
+          mv kata-definition.md "katas/$NEXT_KATA-$KATA_NAME/README.md"
+          
+          echo "✅ Kata definition saved to katas/$NEXT_KATA-$KATA_NAME/README.md"
+      
+      - name: Create branch for next kata
+        if: steps.check.outputs.exists == 'true'
+        id: create_branch
+        env:
+          NEXT_KATA: ${{ steps.next.outputs.next_kata }}
+          KATA_NAME: ${{ steps.check.outputs.kata_name }}
+        run: |
+          git config user.name "GitHub Actions Bot"
+          git config user.email "actions@github.com"
+          
+          BRANCH_NAME="kata-$NEXT_KATA-$KATA_NAME"
+          echo "branch_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
+          
+          echo "🌿 Creating branch: $BRANCH_NAME"
+          
+          git fetch origin main
+          git checkout -b $BRANCH_NAME origin/main
+          
+          git add "katas/$NEXT_KATA-$KATA_NAME/"
+          
+          git commit -m "🔓 Unlock Kata #$NEXT_KATA: $KATA_NAME" \
+            -m "This kata has been automatically unlocked after completing the previous kata." \
+            -m "Read the instructions in katas/$NEXT_KATA-$KATA_NAME/README.md and start implementing following TDD principles."
+          
+          git push -u origin $BRANCH_NAME
+          
+          echo "✅ Branch '$BRANCH_NAME' created and pushed!"
+      
+      - name: Create Pull Request
+        if: steps.check.outputs.exists == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NEXT_KATA: ${{ steps.next.outputs.next_kata }}
+          KATA_NAME: ${{ steps.check.outputs.kata_name }}
+          BRANCH_NAME: ${{ steps.create_branch.outputs.branch_name }}
+          COMPLETED_KATA: ${{ steps.event.outputs.completed_kata }}
+        run: |
+          echo "## 🎉 Congratulations!" > pr-body.md
+          echo "" >> pr-body.md
+          echo "You have successfully completed the previous kata!" >> pr-body.md
+          echo "" >> pr-body.md
+          echo "### 🔓 New Kata Unlocked" >> pr-body.md
+          echo "" >> pr-body.md
+          echo "**Kata #$NEXT_KATA**: $KATA_NAME" >> pr-body.md
+          echo "" >> pr-body.md
+          echo "### 🚀 How to Start" >> pr-body.md
+          echo "" >> pr-body.md
+          echo '```bash' >> pr-body.md
+          echo "git fetch origin" >> pr-body.md
+          echo "git checkout $BRANCH_NAME" >> pr-body.md
+          echo "cat katas/$NEXT_KATA-$KATA_NAME/README.md" >> pr-body.md
+          echo '```' >> pr-body.md
+          echo "" >> pr-body.md
+          echo "### 📊 Your Progress" >> pr-body.md
+          echo "" >> pr-body.md
+          echo "- ✅ Completed: $COMPLETED_KATA katas" >> pr-body.md
+          echo "- 🎯 Current: Kata #$NEXT_KATA" >> pr-body.md
+          echo "" >> pr-body.md
+          echo "**Good luck!** 🚀" >> pr-body.md
+          
+          gh pr create \
+            --title "🎯 Kata $NEXT_KATA: $KATA_NAME - UNLOCKED! 🔓" \
+            --body-file pr-body.md \
+            --base main \
+            --head $BRANCH_NAME \
+            --label "kata" \
+            --label "unlocked"
+          
+          echo "✅ Pull Request created successfully!"
+      
+      - name: Completion message
+        if: steps.check.outputs.exists == 'false'
+        run: |
+          echo "========================================"
+          echo "🎓 ALL KATAS COMPLETED! 🏆"
+          echo "========================================"
+          echo ""
+          echo "🎉 Congratulations! You've completed all available katas!"
+          echo ""
+          echo "You are now a TDD master! 🥋"
+          echo ""
+          echo "📊 Final Stats:"
+          echo "   - Total katas completed: ${{ steps.event.outputs.completed_kata }}"
+          echo "   - TDD skills: Expert level 🌟"
+          echo ""
+          echo "🎯 What's next?"
+          echo "   - Review your solutions"
+          echo "   - Refactor for even better code"
+          echo "   - Help others learn TDD"
+          echo "   - Explore advanced katas"
+          echo ""
+          echo "🏅 Achievement Unlocked: TDD Journey Complete!"
+          echo "========================================"
+      
+      - name: Summary
+        if: always()
+        run: |
+          if [ "${{ steps.check.outputs.exists }}" == "true" ]; then
+            echo "✅ Kata #${{ steps.next.outputs.next_kata }} unlocked successfully!"
+            echo "🌿 Branch: ${{ steps.create_branch.outputs.branch_name }}"
+            echo "📬 PR created with instructions"
+            echo ""
+            echo "👉 Student should run: git fetch origin && git checkout ${{ steps.create_branch.outputs.branch_name }}"
+          else
+            echo "🎓 All katas completed - no more to unlock"
+          fi
