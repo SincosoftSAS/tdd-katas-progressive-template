@@ -1,0 +1,44 @@
+name: Autograding Tests
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Run tests
+      run: npm test
+
+    - name: Check code coverage
+      run: |
+        echo "Checking coverage..."
+        npm test -- --coverage --coverageReporters=text-summary | tee coverage.txt
+        COVERAGE=$(grep "Lines" coverage.txt | grep -oP '\d+(?:\.\d+)?(?=%)' | head -1)
+        echo "Coverage: ${COVERAGE}%"
+        if (( $(echo "$COVERAGE < 80" | bc -l) )); then
+          echo "❌ Coverage below 80%: ${COVERAGE}%"
+          exit 1
+        fi
+        echo "✅ Coverage OK: ${COVERAGE}%"
+
+    - name: Run linter (optional)
+      run: |
+        npx eslint src/ tests/ --max-warnings=0 || true
+      continue-on-error: true
