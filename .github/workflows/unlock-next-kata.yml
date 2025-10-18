@@ -32,56 +32,40 @@ jobs:
         env:
           COMPLETED: ${{ steps.event.outputs.completed_kata }}
         run: |
-          NEXT_KATA=$(printf "%02d" $((10#$COMPLETED + 1)))
+          NEXT_NUM=$((10#$COMPLETED + 1))
+          NEXT_KATA=$(printf "%02d" $NEXT_NUM)
           echo "next_kata=$NEXT_KATA" >> $GITHUB_OUTPUT
-          echo "🔓 Preparing to unlock Kata #$NEXT_KATA"
-      
-      - name: Check if next kata exists
-        id: check
-        env:
-          NEXT_KATA: ${{ steps.next.outputs.next_kata }}
-          REPO_OWNER: ${{ github.repository_owner }}
-        run: |
-          echo "🔍 Searching for kata definition files..."
           
-          SEARCH_URL="https://api.github.com/repos/$REPO_OWNER/tdd-katas-progressive-template/contents/.github/kata-definitions"
+          # Map kata numbers to names
+          case $NEXT_KATA in
+            "02") KATA_NAME="calculator" ;;
+            "03") KATA_NAME="leapyear" ;;
+            "04") KATA_NAME="romannumerals" ;;
+            "05") KATA_NAME="bowlinggame" ;;
+            *) KATA_NAME="" ;;
+          esac
           
-          echo "Searching in: $SEARCH_URL"
-          
-          FILES=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-            -H "Accept: application/vnd.github+json" \
-            "$SEARCH_URL" | jq -r '.[].name')
-          
-          echo "Available files:"
-          echo "$FILES"
-          
-          KATA_FILE=$(echo "$FILES" | grep "^kata-$NEXT_KATA-.*\.md$" | head -1)
-          
-          if [ -n "$KATA_FILE" ]; then
+          if [ -n "$KATA_NAME" ]; then
             echo "exists=true" >> $GITHUB_OUTPUT
-            echo "filename=$KATA_FILE" >> $GITHUB_OUTPUT
-            
-            KATA_NAME=$(echo "$KATA_FILE" | sed -E "s/^kata-$NEXT_KATA-(.*)\.md$/\1/")
             echo "kata_name=$KATA_NAME" >> $GITHUB_OUTPUT
-            
-            echo "✅ Found next kata: $KATA_FILE (name: $KATA_NAME)"
+            echo "🔓 Unlocking Kata #$NEXT_KATA: $KATA_NAME"
           else
             echo "exists=false" >> $GITHUB_OUTPUT
             echo "🎓 No more katas available. All katas completed!"
           fi
       
       - name: Download next kata definition
-        if: steps.check.outputs.exists == 'true'
+        if: steps.next.outputs.exists == 'true'
         env:
           NEXT_KATA: ${{ steps.next.outputs.next_kata }}
-          KATA_NAME: ${{ steps.check.outputs.kata_name }}
-          KATA_FILE: ${{ steps.check.outputs.filename }}
+          KATA_NAME: ${{ steps.next.outputs.kata_name }}
           REPO_OWNER: ${{ github.repository_owner }}
         run: |
+          KATA_FILE="kata-$NEXT_KATA-$KATA_NAME.md"
           echo "📥 Downloading kata definition: $KATA_FILE"
           
           curl -L -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-            "https://raw.githubusercontent.com/$REPO_OWNER/tdd-katas-progressive-template/main/.github/kata-definitions/$KATA_FILE" \
+            "https://raw.githubusercontent.com/$REPO_OWNER/tdd-katas-progressive-template/master/.github/kata-definitions/$KATA_FILE" \
             -o kata-definition.md
           
           if [ ! -f kata-definition.md ]; then
@@ -95,11 +79,11 @@ jobs:
           echo "✅ Kata definition saved to katas/$NEXT_KATA-$KATA_NAME/README.md"
       
       - name: Create branch for next kata
-        if: steps.check.outputs.exists == 'true'
+        if: steps.next.outputs.exists == 'true'
         id: create_branch
         env:
           NEXT_KATA: ${{ steps.next.outputs.next_kata }}
-          KATA_NAME: ${{ steps.check.outputs.kata_name }}
+          KATA_NAME: ${{ steps.next.outputs.kata_name }}
         run: |
           git config user.name "GitHub Actions Bot"
           git config user.email "actions@github.com"
@@ -123,11 +107,11 @@ jobs:
           echo "✅ Branch '$BRANCH_NAME' created and pushed!"
       
       - name: Create Pull Request
-        if: steps.check.outputs.exists == 'true'
+        if: steps.next.outputs.exists == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NEXT_KATA: ${{ steps.next.outputs.next_kata }}
-          KATA_NAME: ${{ steps.check.outputs.kata_name }}
+          KATA_NAME: ${{ steps.next.outputs.kata_name }}
           BRANCH_NAME: ${{ steps.create_branch.outputs.branch_name }}
           COMPLETED_KATA: ${{ steps.event.outputs.completed_kata }}
         run: |
@@ -165,7 +149,7 @@ jobs:
           echo "✅ Pull Request created successfully!"
       
       - name: Completion message
-        if: steps.check.outputs.exists == 'false'
+        if: steps.next.outputs.exists == 'false'
         run: |
           echo "========================================"
           echo "🎓 ALL KATAS COMPLETED! 🏆"
@@ -191,7 +175,7 @@ jobs:
       - name: Summary
         if: always()
         run: |
-          if [ "${{ steps.check.outputs.exists }}" == "true" ]; then
+          if [ "${{ steps.next.outputs.exists }}" == "true" ]; then
             echo "✅ Kata #${{ steps.next.outputs.next_kata }} unlocked successfully!"
             echo "🌿 Branch: ${{ steps.create_branch.outputs.branch_name }}"
             echo "📬 PR created with instructions"
