@@ -3,6 +3,8 @@ name: Grade Kata
 on:
   push:
     branches:
+      - 'master'
+      - 'main'
       - 'kata-**'
 
 permissions:
@@ -20,20 +22,32 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
       
-      - name: Detect kata from branch name
+      - name: Detect current kata
         id: detect
         run: |
           BRANCH=${GITHUB_REF#refs/heads/}
           echo "branch_name=$BRANCH" >> $GITHUB_OUTPUT
           
-          # Extract kata number (e.g., kata-01-fizzbuzz → 01)
-          KATA_NUMBER=$(echo $BRANCH | grep -oP 'kata-\K\d+')
+          # Detect kata from progress file
+          if [ -f .kata-progress.json ]; then
+            CURRENT_KATA=$(jq -r '.current' .kata-progress.json)
+          else
+            CURRENT_KATA=1
+          fi
+          
+          # Format kata number (e.g., 1 → 01)
+          KATA_NUMBER=$(printf "%02d" $CURRENT_KATA)
           echo "kata_number=$KATA_NUMBER" >> $GITHUB_OUTPUT
           
-          # Extract kata name (e.g., kata-01-fizzbuzz → fizzbuzz)
-          KATA_NAME=$(echo $BRANCH | sed 's/^kata-[0-9]*-//')
-          echo "kata_name=$KATA_NAME" >> $GITHUB_OUTPUT
+          # Map kata number to name
+          case $KATA_NUMBER in
+            "01") KATA_NAME="fizzbuzz" ;;
+            "02") KATA_NAME="calculator" ;;
+            "03") KATA_NAME="leapyear" ;;
+            *) KATA_NAME="unknown" ;;
+          esac
           
+          echo "kata_name=$KATA_NAME" >> $GITHUB_OUTPUT
           echo "🎯 Evaluating Kata #$KATA_NUMBER: $KATA_NAME"
       
       # ========== C# TESTING WORKFLOW ==========
