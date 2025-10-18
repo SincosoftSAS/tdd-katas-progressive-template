@@ -138,7 +138,11 @@ jobs:
           
           # Add completed kata and update current
           CURRENT_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-          echo $PROGRESS | jq ".completed += [$KATA_NUMBER] | .completed |= unique | sort | .current = ($KATA_NUMBER + 1) | .last_completed_date = \"$CURRENT_DATE\"" > .kata-progress.json
+          KATA_NUM_INT=$(echo $KATA_NUMBER | sed 's/^0*//')  # Remove leading zeros: 01 -> 1
+          
+          echo $PROGRESS | jq --argjson num "$KATA_NUM_INT" --arg date "$CURRENT_DATE" \
+            '.completed += [$num] | .completed |= unique | .completed |= sort | .current = ($num + 1) | .last_completed_date = $date' \
+            > .kata-progress.json
           
           git add .kata-progress.json
           git commit -m "✅ Kata $KATA_NUMBER completed! 🎉 [skip ci]" || true
