@@ -144,7 +144,7 @@ jobs:
             '.completed += [$num] | .completed |= unique | .completed |= sort | .current = ($num + 1) | .last_completed_date = $date' \
             > .kata-progress.json
           
-          git add .kata-progress.json
+          git add -f .kata-progress.json
           git commit -m "✅ Kata $KATA_NUMBER completed! 🎉 [skip ci]" || true
           git push origin ${{ steps.detect.outputs.branch_name }}
           

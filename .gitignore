@@ -17,9 +17,6 @@ obj/
 # Tests ocultos (students should NOT have this)
 .github/ci-tests/
 
-# Progress tracking
-.kata-progress.json
-
 # Temporary files
 pr-body.md
 test-output.txt
