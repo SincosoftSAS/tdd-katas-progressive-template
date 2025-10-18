@@ -1,1 +1,211 @@
-404: Not Found
+name: Grade Kata
+
+on:
+  push:
+    branches:
+      - 'master'
+      - 'main'
+      - 'kata-**'
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  grade:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout student code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Detect current kata
+        id: detect
+        run: |
+          BRANCH=${GITHUB_REF#refs/heads/}
+          echo "branch_name=$BRANCH" >> $GITHUB_OUTPUT
+          
+          # Detect kata from progress file
+          if [ -f .kata-progress.json ]; then
+            CURRENT_KATA=$(jq -r '.current' .kata-progress.json)
+          else
+            CURRENT_KATA=1
+          fi
+          
+          # Format kata number (e.g., 1 → 01)
+          KATA_NUMBER=$(printf "%02d" $CURRENT_KATA)
+          echo "kata_number=$KATA_NUMBER" >> $GITHUB_OUTPUT
+          
+          # Map kata number to name
+          case $KATA_NUMBER in
+            "01") KATA_NAME="fizzbuzz" ;;
+            "02") KATA_NAME="calculator" ;;
+            "03") KATA_NAME="leapyear" ;;
+            *) KATA_NAME="unknown" ;;
+          esac
+          
+          echo "kata_name=$KATA_NAME" >> $GITHUB_OUTPUT
+          echo "🎯 Evaluating Kata #$KATA_NUMBER: $KATA_NAME"
+      
+      # ========== C# TESTING WORKFLOW ==========
+      
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      
+      - name: Download hidden tests (C#)
+        env:
+          KATA_NUMBER: ${{ steps.detect.outputs.kata_number }}
+          KATA_NAME: ${{ steps.detect.outputs.kata_name }}
+          REPO_OWNER: ${{ github.repository_owner }}
+        run: |
+          echo "📦 Downloading hidden tests for Kata $KATA_NUMBER..."
+          
+          # Determine project name from kata name (capitalize first letter)
+          PROJECT_NAME=$(echo $KATA_NAME | sed 's/\b\(.\)/\u\1/g' | sed 's/-//g')
+          echo "Project name: $PROJECT_NAME"
+          
+          # Try to download HiddenTests.cs
+          HTTP_CODE=$(curl -L -w "%{http_code}" -o HiddenTests.cs \
+            "https://raw.githubusercontent.com/$REPO_OWNER/tdd-katas-progressive-template/main/.github/ci-tests/kata-$KATA_NUMBER-$KATA_NAME/HiddenTests.cs")
+          
+          if [ "$HTTP_CODE" == "200" ] && [ -f HiddenTests.cs ]; then
+            echo "✅ Hidden tests downloaded successfully"
+            
+            # Download .csproj file - try both generic and specific names
+            curl -L "https://raw.githubusercontent.com/$REPO_OWNER/tdd-katas-progressive-template/main/.github/ci-tests/kata-$KATA_NUMBER-$KATA_NAME/$PROJECT_NAME.HiddenTests.csproj" \
+              -o HiddenTests.csproj
+            
+            # Create hidden tests project directory
+            mkdir -p $PROJECT_NAME.HiddenTests
+            mv HiddenTests.cs HiddenTests.csproj $PROJECT_NAME.HiddenTests/
+            
+            # Add to solution if exists
+            if ls *.sln 1> /dev/null 2>&1; then
+              dotnet sln add $PROJECT_NAME.HiddenTests/HiddenTests.csproj 2>/dev/null || true
+            fi
+            
+            echo "has_hidden_tests=true" >> $GITHUB_ENV
+          else
+            echo "ℹ️ No hidden tests found for this kata (HTTP $HTTP_CODE)"
+            echo "has_hidden_tests=false" >> $GITHUB_ENV
+          fi
+      
+      - name: Build and test (C#)
+        id: test_csharp
+        continue-on-error: true
+        run: |
+          echo "🔨 Building project..."
+          dotnet restore
+          dotnet build --no-restore
+          
+          echo "🧪 Running tests..."
+          dotnet test --no-build --verbosity normal 2>&1 | tee test-output.txt
+          
+          if [ ${PIPESTATUS[0]} -eq 0 ]; then
+            echo "result=success" >> $GITHUB_OUTPUT
+            echo "✅ All C# tests passed!"
+          else
+            echo "result=failure" >> $GITHUB_OUTPUT
+            echo "❌ Some C# tests failed"
+          fi
+      
+      # ========== COMMON: Update Progress ==========
+      
+      - name: Determine test result
+        id: test
+        run: |
+          echo "result=${{ steps.test_csharp.outputs.result }}" >> $GITHUB_OUTPUT
+      
+      - name: Update progress tracking
+        if: steps.test.outputs.result == 'success'
+        env:
+          KATA_NUMBER: ${{ steps.detect.outputs.kata_number }}
+        run: |
+          git config user.name "GitHub Actions Bot"
+          git config user.email "actions@github.com"
+          
+          # Create or update .kata-progress.json
+          if [ -f .kata-progress.json ]; then
+            PROGRESS=$(cat .kata-progress.json)
+          else
+            PROGRESS='{"completed":[],"current":1,"last_completed_date":""}'
+          fi
+          
+          # Add completed kata and update current
+          CURRENT_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          KATA_NUM_INT=$(echo $KATA_NUMBER | sed 's/^0*//')  # Remove leading zeros: 01 -> 1
+          
+          echo $PROGRESS | jq --argjson num "$KATA_NUM_INT" --arg date "$CURRENT_DATE" \
+            '.completed += [$num] | .completed |= unique | .completed |= sort | .current = ($num + 1) | .last_completed_date = $date' \
+            > .kata-progress.json
+          
+          git add .kata-progress.json
+          git commit -m "✅ Kata $KATA_NUMBER completed! 🎉 [skip ci]" || true
+          git push origin ${{ steps.detect.outputs.branch_name }}
+          
+          echo "📊 Progress updated successfully"
+      
+      - name: Trigger unlock next kata
+        if: steps.test.outputs.result == 'success'
+        run: |
+          echo "🔓 Triggering unlock workflow for next kata..."
+          
+          # Trigger via repository dispatch
+          curl -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            https://api.github.com/repos/${{ github.repository }}/dispatches \
+            -d '{
+              "event_type": "unlock-next-kata",
+              "client_payload": {
+                "completed_kata": "${{ steps.detect.outputs.kata_number }}",
+                "kata_name": "${{ steps.detect.outputs.kata_name }}",
+                "student_branch": "${{ steps.detect.outputs.branch_name }}"
+              }
+            }'
+      
+      - name: Report results
+        if: always()
+        run: |
+          echo "========================================"
+          echo "📊 Kata Evaluation Summary"
+          echo "========================================"
+          echo "Kata: #${{ steps.detect.outputs.kata_number }} - ${{ steps.detect.outputs.kata_name }}"
+          echo "Type: C# (.NET 8.0)"
+          echo "Branch: ${{ steps.detect.outputs.branch_name }}"
+          echo ""
+          
+          if [ "${{ steps.test.outputs.result }}" == "success" ]; then
+            echo "✅ STATUS: COMPLETED! 🎉"
+            echo ""
+            echo "🎓 Congratulations! All tests passed."
+            echo "🔓 Next kata will be unlocked automatically..."
+            echo ""
+            echo "⏳ Wait for the unlock workflow to complete."
+            echo "📬 You'll receive a notification when the next kata is ready."
+          else
+            echo "⏳ STATUS: IN PROGRESS"
+            echo ""
+            echo "📝 Some tests are still failing. Keep working!"
+            echo "💡 Tips:"
+            echo "   - Review the test output above"
+            echo "   - Follow TDD: Red → Green → Refactor"
+            echo "   - Run tests locally before pushing"
+            echo ""
+            echo "🔄 Push again when ready to re-evaluate."
+          fi
+          echo "========================================"
+      
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-kata-${{ steps.detect.outputs.kata_number }}
+          path: test-output.txt
+          if-no-files-found: ignore
