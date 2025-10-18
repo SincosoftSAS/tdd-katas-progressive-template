@@ -1,0 +1,166 @@
+name: Sync from Template
+
+on:
+  # Se ejecuta semanalmente
+  schedule:
+    - cron: '0 0 * * 0'  # Cada domingo a medianoche
+  
+  # También se puede ejecutar manualmente
+  workflow_dispatch:
+  
+  # O automáticamente cuando el template se actualiza (requiere webhook)
+  repository_dispatch:
+    types: [template-updated]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout student repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Configure git
+        run: |
+          git config user.name "GitHub Actions Bot"
+          git config user.email "actions@github.com"
+      
+      - name: Add template remote
+        run: |
+          # Verificar si el remote ya existe
+          if git remote | grep -q "template"; then
+            git remote remove template
+          fi
+          
+          git remote add template https://github.com/${{ github.repository_owner }}/tdd-katas-progressive-template.git
+          git fetch template
+      
+      - name: Check for updates
+        id: check
+        run: |
+          # Comparar workflows y definiciones
+          DIFF_WORKFLOWS=$(git diff HEAD template/master -- .github/workflows/ || echo "")
+          DIFF_DEFINITIONS=$(git diff HEAD template/master -- .github/kata-definitions/ || echo "")
+          
+          if [ -n "$DIFF_WORKFLOWS" ] || [ -n "$DIFF_DEFINITIONS" ]; then
+            echo "has_updates=true" >> $GITHUB_OUTPUT
+            echo "📦 Updates available from template"
+          else
+            echo "has_updates=false" >> $GITHUB_OUTPUT
+            echo "✅ Already up to date"
+          fi
+      
+      - name: Create sync branch
+        if: steps.check.outputs.has_updates == 'true'
+        run: |
+          BRANCH_NAME="sync/template-$(date +%Y%m%d)"
+          git checkout -b $BRANCH_NAME
+          echo "branch_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
+      
+      - name: Sync workflows
+        if: steps.check.outputs.has_updates == 'true'
+        run: |
+          # Copiar workflows actualizados del template
+          git checkout template/master -- .github/workflows/
+          
+          echo "✅ Workflows synced from template"
+      
+      - name: Sync kata definitions
+        if: steps.check.outputs.has_updates == 'true'
+        run: |
+          # Copiar nuevas definiciones de katas (sin sobrescribir las existentes)
+          git checkout template/master -- .github/kata-definitions/
+          
+          echo "✅ Kata definitions synced from template"
+      
+      - name: Commit changes
+        if: steps.check.outputs.has_updates == 'true'
+        run: |
+          git add .github/workflows/ .github/kata-definitions/
+          
+          git commit -m "🔄 Sync updates from template" \
+            -m "Synced workflows and kata definitions from the template repository." \
+            -m "This includes:" \
+            -m "- Updated GitHub Actions workflows" \
+            -m "- New kata definitions (if any)" \
+            || echo "No changes to commit"
+      
+      - name: Push sync branch
+        if: steps.check.outputs.has_updates == 'true'
+        run: |
+          BRANCH_NAME=$(git branch --show-current)
+          git push origin $BRANCH_NAME
+          echo "branch_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
+      
+      - name: Create Pull Request
+        if: steps.check.outputs.has_updates == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          BRANCH_NAME=$(git branch --show-current)
+          
+          echo "## 🔄 Template Sync Updates" > pr-body.md
+          echo "" >> pr-body.md
+          echo "This PR includes updates synced from the template repository." >> pr-body.md
+          echo "" >> pr-body.md
+          echo "### 📦 What's Included" >> pr-body.md
+          echo "" >> pr-body.md
+          echo "- ✅ **Updated workflows** - Latest GitHub Actions improvements" >> pr-body.md
+          echo "- ✅ **New kata definitions** - Additional katas may be available" >> pr-body.md
+          echo "- ✅ **Bug fixes** - Any fixes from the template" >> pr-body.md
+          echo "" >> pr-body.md
+          echo "### 🔍 What to Review" >> pr-body.md
+          echo "" >> pr-body.md
+          echo "Please review the changes to ensure they don't conflict with your custom work." >> pr-body.md
+          echo "" >> pr-body.md
+          echo "**Files updated:**" >> pr-body.md
+          echo "- \`.github/workflows/\` - GitHub Actions workflows" >> pr-body.md
+          echo "- \`.github/kata-definitions/\` - Kata instruction files" >> pr-body.md
+          echo "" >> pr-body.md
+          echo "### ✅ Safe to Merge" >> pr-body.md
+          echo "" >> pr-body.md
+          echo "These updates are safe to merge and will:" >> pr-body.md
+          echo "- 🎯 Enable new katas (if available)" >> pr-body.md
+          echo "- 🐛 Fix any known issues" >> pr-body.md
+          echo "- ⚡ Improve workflow performance" >> pr-body.md
+          echo "" >> pr-body.md
+          echo "---" >> pr-body.md
+          echo "" >> pr-body.md
+          echo "🤖 This PR was created automatically by the template sync workflow." >> pr-body.md
+          
+          gh pr create \
+            --title "🔄 Sync updates from template" \
+            --body-file pr-body.md \
+            --base master \
+            --head $BRANCH_NAME \
+            --label "sync" \
+            --label "template-update"
+          
+          echo "✅ Pull Request created for sync updates"
+      
+      - name: Summary
+        if: always()
+        run: |
+          if [ "${{ steps.check.outputs.has_updates }}" == "true" ]; then
+            echo "========================================"
+            echo "📦 Template Sync"
+            echo "========================================"
+            echo "✅ Updates found and synced"
+            echo "🌿 Branch created with changes"
+            echo "📬 Pull Request created for review"
+            echo "========================================"
+          else
+            echo "========================================"
+            echo "📦 Template Sync"
+            echo "========================================"
+            echo "✅ Repository is up to date"
+            echo "ℹ️ No updates needed"
+            echo "========================================"
+          fi
