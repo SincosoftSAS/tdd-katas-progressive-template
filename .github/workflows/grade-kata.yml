@@ -29,8 +29,8 @@ jobs:
           echo "branch_name=$BRANCH" >> $GITHUB_OUTPUT
           
           # Detect kata from progress file
-          if [ -f .kata-progress.json ]; then
-            CURRENT_KATA=$(jq -r '.current' .kata-progress.json)
+          if [ -f .github/.kata-progress.json ]; then
+            CURRENT_KATA=$(jq -r '.current' .github/.kata-progress.json)
           else
             CURRENT_KATA=1
           fi
@@ -129,9 +129,9 @@ jobs:
           git config user.name "GitHub Actions Bot"
           git config user.email "actions@github.com"
           
-          # Create or update .kata-progress.json
-          if [ -f .kata-progress.json ]; then
-            PROGRESS=$(cat .kata-progress.json)
+          # Create or update .kata-progress.json (in .github/)
+          if [ -f .github/.kata-progress.json ]; then
+            PROGRESS=$(cat .github/.kata-progress.json)
           else
             PROGRESS='{"completed":[],"current":1,"last_completed_date":""}'
           fi
@@ -142,13 +142,55 @@ jobs:
           
           echo $PROGRESS | jq --argjson num "$KATA_NUM_INT" --arg date "$CURRENT_DATE" \
             '.completed += [$num] | .completed |= unique | .completed |= sort | .current = ($num + 1) | .last_completed_date = $date' \
-            > .kata-progress.json
+            > .github/.kata-progress.json
           
-          git add -f .kata-progress.json
-          git commit -m "✅ Kata $KATA_NUMBER completed! 🎉 [skip ci]" || true
+          git add -f .github/.kata-progress.json
+          
+          echo "📊 Progress file updated successfully"
+      
+      - name: Update student PROGRESS.md
+        if: steps.test.outputs.result == 'success'
+        env:
+          KATA_NUMBER: ${{ steps.detect.outputs.kata_number }}
+          KATA_NAME: ${{ steps.detect.outputs.kata_name }}
+        run: |
+          echo "📝 Updating PROGRESS.md for student..."
+          
+          # Read current progress
+          COMPLETED_COUNT=$(jq -r '.completed | length' .github/.kata-progress.json)
+          CURRENT_KATA=$(jq -r '.current' .github/.kata-progress.json)
+          LAST_DATE=$(jq -r '.last_completed_date' .github/.kata-progress.json)
+          
+          # Determine level based on completed count
+          if [ "$COMPLETED_COUNT" -eq 0 ]; then
+            LEVEL="Principiante 🥚"
+          elif [ "$COMPLETED_COUNT" -eq 1 ]; then
+            LEVEL="Iniciado 🐣"
+          elif [ "$COMPLETED_COUNT" -eq 2 ]; then
+            LEVEL="En Progreso 🐥"
+          elif [ "$COMPLETED_COUNT" -eq 3 ]; then
+            LEVEL="Avanzado 🦅"
+          else
+            LEVEL="Experto 🏅"
+          fi
+          
+          # Update estado actual
+          sed -i "s/\*\*Kata Actual:\*\* Kata [0-9]\\+ - [A-Za-z]\\+/**Kata Actual:** Kata $KATA_NUMBER - $KATA_NAME (✅ Completada)/" PROGRESS.md
+          
+          # Update completed count
+          sed -i "s/\*\*Katas Completadas:\*\* [0-9]\\+ \\/ 5/**Katas Completadas:** $COMPLETED_COUNT \/ 5/" PROGRESS.md
+          
+          # Update level
+          sed -i "s/\*\*Nivel:\*\* [^$]*/**Nivel:** $LEVEL/" PROGRESS.md
+          
+          # Update timestamp
+          sed -i "s/<sub>Última actualización:.*<\\/sub>/<sub>Última actualización: $LAST_DATE | Kata actual: $KATA_NUMBER | Completada ✅<\\/sub>/" PROGRESS.md
+          
+          git add PROGRESS.md
+          git commit -m "Update progress: Kata $KATA_NUMBER completed" -m "[skip ci]" || true
           git push origin ${{ steps.detect.outputs.branch_name }}
           
-          echo "📊 Progress updated successfully"
+          echo "📊 Student PROGRESS.md updated successfully"
       
       - name: Trigger unlock next kata
         if: steps.test.outputs.result == 'success'
