@@ -22,6 +22,19 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
       
+      - name: Set initial commit status
+        run: |
+          curl -X POST \
+            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            https://api.github.com/repos/${{ github.repository }}/statuses/${{ github.sha }} \
+            -d '{
+              "state": "pending",
+              "target_url": "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}",
+              "description": "🧪 Evaluando tests TDD...",
+              "context": "kata-tests"
+            }'
+
       - name: Detect current kata
         id: detect
         run: |
@@ -237,6 +250,148 @@ jobs:
           git push origin ${{ steps.detect.outputs.branch_name }}
           
           echo "📊 PROGRESS.md updated with failure status"
+      
+      - name: Display immediate results
+        if: always()
+        env:
+          KATA_NUMBER: ${{ steps.detect.outputs.kata_number }}
+          KATA_NAME: ${{ steps.detect.outputs.kata_name }}
+        run: |
+          echo "=================================================="
+          echo "🎯 TDD KATA EVALUATION RESULTS"
+          echo "=================================================="
+          echo "📝 Kata: #$KATA_NUMBER - $KATA_NAME"
+          echo "📅 Time: $(date -u +"%Y-%m-%d %H:%M:%S UTC")"
+          echo "🔀 Commit: ${{ github.sha }}"
+          echo "=================================================="
+          
+          if [ "${{ steps.test.outputs.result }}" == "success" ]; then
+            echo "🎉 STATUS: SUCCESS! ✅"
+            echo "=================================================="
+            echo "✅ All visible tests: PASSED"
+            echo "✅ All hidden tests: PASSED"
+            echo "📊 Progress: UPDATED"
+            echo "🔓 Next kata: UNLOCKING..."
+            echo "=================================================="
+            echo "🚀 NEXT STEPS:"
+            echo "   1. Wait ~30 seconds for unlock"
+            echo "   2. Check for new PR with next kata"
+            echo "   3. Continue your TDD journey!"
+          else
+            echo "❌ STATUS: TESTS FAILED"
+            echo "=================================================="
+            echo "❌ Some tests failed - see details below"
+            echo "📊 Progress: NOT UPDATED (stay on current kata)"
+            echo "🔧 Feedback: Automatic issue created"
+            echo "=================================================="
+            echo "🔍 WHAT TO CHECK:"
+            echo "   1. Visit GitHub Issues for detailed feedback"
+            echo "   2. Check PROGRESS.md for current status"
+            echo "   3. Review test failures in Actions logs"
+            echo "   4. Follow TDD cycle: Red → Green → Refactor"
+          fi
+          
+          echo "=================================================="
+          echo "📱 FEEDBACK CHANNELS:"
+          echo "   - ✅ Commit status (visible in GitHub)"
+          echo "   - 💬 Commit comment (click commit in GitHub)"
+          echo "   - 📋 GitHub Issue (for failures)"
+          echo "   - 📊 PROGRESS.md (visual dashboard)"
+          echo "=================================================="
+
+      - name: Update commit status
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          KATA_NUMBER: ${{ steps.detect.outputs.kata_number }}
+          KATA_NAME: ${{ steps.detect.outputs.kata_name }}
+        run: |
+          if [ "${{ steps.test.outputs.result }}" == "success" ]; then
+            echo "✅ Setting commit status to success"
+            gh api \
+              --method POST \
+              /repos/${{ github.repository }}/statuses/${{ github.sha }} \
+              -f state='success' \
+              -f target_url='${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}' \
+              -f description='All tests passed! Kata ${{ steps.detect.outputs.kata_number }} completed 🎉' \
+              -f context='TDD Kata Evaluation'
+          else
+            echo "❌ Setting commit status to failure"
+            gh api \
+              --method POST \
+              /repos/${{ github.repository }}/statuses/${{ github.sha }} \
+              -f state='failure' \
+              -f target_url='${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}' \
+              -f description='Tests failed - check logs and issue for guidance' \
+              -f context='TDD Kata Evaluation'
+          fi
+      
+      - name: Add commit comment with results
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          KATA_NUMBER: ${{ steps.detect.outputs.kata_number }}
+          KATA_NAME: ${{ steps.detect.outputs.kata_name }}
+        run: |
+          if [ "${{ steps.test.outputs.result }}" == "success" ]; then
+            cat > commit-comment.md << 'EOF'
+          ## ✅ Kata Tests Passed! 🎉
+          
+          **Kata:** #$KATA_NUMBER - $KATA_NAME  
+          **Status:** All tests completed successfully  
+          **Time:** $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+          
+          ### 🎓 What happened:
+          - ✅ All visible tests passed
+          - ✅ All hidden tests passed
+          - 📊 Your progress has been updated
+          - 🔓 Next kata is being unlocked automatically
+          
+          ### 🚀 Next steps:
+          - Wait ~30 seconds for unlock workflow
+          - Check for new PR with next kata
+          - Continue your TDD journey!
+          
+          **Great work following TDD principles!** 🏆
+          EOF
+          else
+            # Get test failure details
+            if [ -f test-output.txt ]; then
+              FAILED_SUMMARY=$(grep -E "(Failed|Error)" test-output.txt | head -3 | sed 's/^/  /')
+            else
+              FAILED_SUMMARY="  Tests execution failed"
+            fi
+            
+            cat > commit-comment.md << EOF
+          ## ❌ Kata Tests Failed
+          
+          **Kata:** #$KATA_NUMBER - $KATA_NAME  
+          **Status:** Some tests are failing  
+          **Time:** $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+          
+          ### 🚨 What happened:
+          $FAILED_SUMMARY
+          
+          ### 🔍 Next steps:
+          1. **Check the [issue created](${{ github.server_url }}/${{ github.repository }}/issues?q=is%3Aopen+label%3Atest-failure+label%3Akata-$KATA_NUMBER)** for detailed guidance
+          2. **Run tests locally:** \`dotnet test\`
+          3. **Follow TDD cycle:** Red → Green → Refactor
+          4. **Push again** when ready for re-evaluation
+          
+          ### 💡 Remember:
+          **Failing tests is part of TDD learning!** Each failure teaches you something. Keep iterating! 🔄
+          
+          **Detailed logs:** [View workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+          EOF
+          fi
+          
+          # Post comment to commit
+          gh api \
+            --method POST \
+            /repos/${{ github.repository }}/commits/${{ github.sha }}/comments \
+            -f body="$(cat commit-comment.md)"
+          
+          echo "📝 Commit comment added with test results"
       
       - name: Create failure notification issue
         if: steps.test.outputs.result == 'failure'
