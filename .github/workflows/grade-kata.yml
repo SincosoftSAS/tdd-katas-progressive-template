@@ -175,7 +175,7 @@ jobs:
           fi
           
           # Update estado actual
-          sed -i "s/\*\*Kata Actual:\*\* Kata [0-9]\\+ - [A-Za-z]\\+/**Kata Actual:** Kata $KATA_NUMBER - $KATA_NAME (✅ Completada)/" PROGRESS.md
+          sed -i "s/\*\*Kata Actual:\*\* Kata [0-9]\\+ - [A-Za-z]\\+.**/**Kata Actual:** Kata $KATA_NUMBER - $KATA_NAME (✅ Completada)/" PROGRESS.md
           
           # Update completed count
           sed -i "s/\*\*Katas Completadas:\*\* [0-9]\\+ \\/ 5/**Katas Completadas:** $COMPLETED_COUNT \/ 5/" PROGRESS.md
@@ -191,6 +191,155 @@ jobs:
           git push origin ${{ steps.detect.outputs.branch_name }}
           
           echo "📊 Student PROGRESS.md updated successfully"
+      
+      - name: Update PROGRESS.md with failure status
+        if: steps.test.outputs.result == 'failure'
+        env:
+          KATA_NUMBER: ${{ steps.detect.outputs.kata_number }}
+          KATA_NAME: ${{ steps.detect.outputs.kata_name }}
+        run: |
+          echo "📝 Updating PROGRESS.md with failure status..."
+          
+          # Update estado actual with failure indicator
+          sed -i "s/\*\*Kata Actual:\*\* Kata [0-9]\\+ - [A-Za-z]\\+.**/**Kata Actual:** Kata $KATA_NUMBER - $KATA_NAME (⚠️ Tests Failing)/" PROGRESS.md
+          
+          # Add failure message to PROGRESS.md temporarily
+          FAILURE_NOTE="
+          ---
+          
+          ## ⚠️ Current Status: Tests Failing
+          
+          Your latest submission didn't pass all tests. This is normal in TDD!
+          
+          **Next steps:**
+          1. Check the [GitHub Actions](../../actions) for detailed test results
+          2. Look for any open issues with test failure details
+          3. Run \`dotnet test\` locally to see which tests are failing
+          4. Follow the TDD cycle: Red → Green → Refactor
+          5. Push again when ready
+          
+          **Remember:** Failing fast is part of learning TDD! 🚀
+          
+          ---
+          "
+          
+          # Add failure note if not already present
+          if ! grep -q "Tests Failing" PROGRESS.md; then
+            echo "$FAILURE_NOTE" >> PROGRESS.md
+          fi
+          
+          # Update timestamp
+          CURRENT_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          sed -i "s/<sub>Última actualización:.*<\\/sub>/<sub>Última actualización: $CURRENT_DATE | Kata actual: $KATA_NUMBER | Tests failing ⚠️<\\/sub>/" PROGRESS.md
+          
+          git add PROGRESS.md
+          git commit -m "Update: Tests failing for Kata $KATA_NUMBER" -m "[skip ci]" || true
+          git push origin ${{ steps.detect.outputs.branch_name }}
+          
+          echo "📊 PROGRESS.md updated with failure status"
+      
+      - name: Create failure notification issue
+        if: steps.test.outputs.result == 'failure'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          KATA_NUMBER: ${{ steps.detect.outputs.kata_number }}
+          KATA_NAME: ${{ steps.detect.outputs.kata_name }}
+          BRANCH_NAME: ${{ steps.detect.outputs.branch_name }}
+        run: |
+          echo "📝 Creating issue for test failure notification..."
+          
+          # Read test output for details
+          if [ -f test-output.txt ]; then
+            FAILED_TESTS=$(grep "Failed:" test-output.txt | head -1 || echo "Some tests failed")
+            TEST_OUTPUT=$(tail -50 test-output.txt | sed 's/$/\\n/g' | tr -d '\n')
+          else
+            FAILED_TESTS="Tests execution failed"
+            TEST_OUTPUT="No detailed output available"
+          fi
+          
+          # Create issue with failure details
+          cat > issue-body.md << 'EOF'
+          ## ❌ Kata Tests Failed
+          
+          **Kata:** #$KATA_NUMBER - $KATA_NAME  
+          **Branch:** `$BRANCH_NAME`  
+          **Commit:** ${{ github.sha }}  
+          **Date:** $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+          
+          ### 🚨 What Happened
+          
+          Your latest push didn't pass all the required tests. Don't worry - this is part of the TDD learning process!
+          
+          ### 📊 Test Results
+          
+          ```
+          $FAILED_TESTS
+          ```
+          
+          ### 🔍 Next Steps
+          
+          1. **Review the test output** in the [GitHub Actions logs](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+          2. **Run tests locally** to see detailed failures:
+             ```bash
+             dotnet test
+             ```
+          3. **Follow TDD cycle**:
+             - 🔴 **Red**: Understand which test is failing
+             - 🟢 **Green**: Write minimal code to make it pass
+             - 🔵 **Refactor**: Improve your solution
+          4. **Push again** when ready for re-evaluation
+          
+          ### 💡 Common Issues
+          
+          - **Logic errors**: Check your conditionals and loops
+          - **Edge cases**: Are you handling n=0, n=1, etc.?
+          - **Return types**: Make sure you're returning the expected type
+          - **Off-by-one errors**: Check your loop boundaries
+          
+          ### 📚 Resources
+          
+          - Check [`PROGRESS.md`](PROGRESS.md) for detailed kata instructions
+          - Review the kata definition in `.github/kata-definitions/kata-$KATA_NUMBER-$KATA_NAME.md`
+          - Run `dotnet test --logger "console;verbosity=detailed"` for verbose output
+          
+          ### 🎯 Remember
+          
+          **Failing tests is normal and expected in TDD!** Each failure teaches you something. Keep iterating until all tests pass.
+          
+          ---
+          
+          *This issue will be automatically closed when your tests pass. You can also close it manually if no longer needed.*
+          EOF
+          
+          # Create the issue
+          gh issue create \
+            --title "❌ Tests Failed: Kata $KATA_NUMBER ($KATA_NAME)" \
+            --body-file issue-body.md \
+            --label "test-failure" \
+            --label "kata-$KATA_NUMBER" \
+            --assignee "${{ github.actor }}"
+          
+          echo "✅ Failure notification issue created"
+      
+      - name: Close previous failure issues on success
+        if: steps.test.outputs.result == 'success'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          KATA_NUMBER: ${{ steps.detect.outputs.kata_number }}
+        run: |
+          echo "🔍 Checking for open test failure issues to close..."
+          
+          # Find and close open test failure issues for this kata
+          OPEN_ISSUES=$(gh issue list --label "test-failure" --label "kata-$KATA_NUMBER" --state open --json number --jq '.[].number' || echo "")
+          
+          if [ -n "$OPEN_ISSUES" ]; then
+            for issue_number in $OPEN_ISSUES; do
+              echo "✅ Closing test failure issue #$issue_number"
+              gh issue close $issue_number --comment "🎉 **Tests now passing!** All issues resolved. Great work following the TDD process!"
+            done
+          else
+            echo "ℹ️ No open test failure issues found"
+          fi
       
       - name: Trigger unlock next kata
         if: steps.test.outputs.result == 'success'
@@ -221,26 +370,34 @@ jobs:
           echo "Kata: #${{ steps.detect.outputs.kata_number }} - ${{ steps.detect.outputs.kata_name }}"
           echo "Type: C# (.NET 8.0)"
           echo "Branch: ${{ steps.detect.outputs.branch_name }}"
+          echo "Commit: ${{ github.sha }}"
           echo ""
           
           if [ "${{ steps.test.outputs.result }}" == "success" ]; then
             echo "✅ STATUS: COMPLETED! 🎉"
             echo ""
-            echo "🎓 Congratulations! All tests passed."
-            echo "🔓 Next kata will be unlocked automatically..."
+            echo "🎓 Congratulations! All tests passed (visible + hidden)."
+            echo "� Your PROGRESS.md has been updated automatically."
+            echo "�🔓 Next kata will be unlocked automatically..."
             echo ""
-            echo "⏳ Wait for the unlock workflow to complete."
+            echo "⏳ Wait for the unlock workflow to complete (~30 seconds)."
             echo "📬 You'll receive a notification when the next kata is ready."
+            echo "🌿 A new branch will be created with your next challenge."
           else
-            echo "⏳ STATUS: IN PROGRESS"
+            echo "❌ STATUS: TESTS FAILING"
             echo ""
-            echo "📝 Some tests are still failing. Keep working!"
-            echo "💡 Tips:"
-            echo "   - Review the test output above"
-            echo "   - Follow TDD: Red → Green → Refactor"
-            echo "   - Run tests locally before pushing"
+            echo "📝 Some tests didn't pass. This is normal in TDD!"
+            echo "📋 An issue has been created with detailed feedback."
+            echo "📊 Your PROGRESS.md shows current status."
             echo ""
-            echo "🔄 Push again when ready to re-evaluate."
+            echo "💡 Next steps:"
+            echo "   1. Check the test output above for details"
+            echo "   2. Look for the new issue created in this repo"
+            echo "   3. Run 'dotnet test' locally to debug"
+            echo "   4. Follow TDD: Red → Green → Refactor"
+            echo "   5. Push again when ready"
+            echo ""
+            echo "🔄 Keep iterating - you're learning TDD the right way!"
           fi
           echo "========================================"
       
