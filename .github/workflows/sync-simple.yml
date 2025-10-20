@@ -1,0 +1,136 @@
+name: 🔄 Sync Template Updates (Simple)
+
+on:
+  workflow_dispatch:  # Permite ejecutar manualmente
+    inputs:
+      assignment_prefix:
+        description: 'Prefijo de repos de estudiantes'
+        required: true
+        default: 'tdd-katas'
+      dry_run:
+        description: 'Solo mostrar qué se haría'
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  sync-students:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 🔍 Checkout
+        uses: actions/checkout@v4
+
+      - name: 📋 Find student repositories
+        id: find-repos
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "🔍 Buscando repositorios con prefijo '${{ inputs.assignment_prefix }}'..."
+          
+          # Buscar repos en la organización
+          REPOS=$(curl -s \
+            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/orgs/${{ github.repository_owner }}/repos?per_page=100" \
+            | jq -r '.[] | select(.name | startswith("${{ inputs.assignment_prefix }}")) | .name')
+          
+          if [ -z "$REPOS" ]; then
+            echo "❌ No se encontraron repositorios"
+            exit 1
+          fi
+          
+          REPO_COUNT=$(echo "$REPOS" | wc -l)
+          echo "✅ Encontrados $REPO_COUNT repositorios"
+          
+          # Guardar para siguiente step
+          echo "$REPOS" > repos.txt
+          echo "count=$REPO_COUNT" >> $GITHUB_OUTPUT
+
+      - name: 🔍 Show dry run results
+        if: inputs.dry_run == true
+        run: |
+          echo "🔍 DRY RUN - Repositorios que recibirían PRs:"
+          echo "=============================================="
+          
+          while read -r repo; do
+            if [ -n "$repo" ]; then
+              echo "  📁 ${{ github.repository_owner }}/$repo"
+            fi
+          done < repos.txt
+          
+          echo ""
+          echo "📊 Total: ${{ steps.find-repos.outputs.count }} repositorios"
+          echo ""
+          echo "💡 Para ejecutar realmente:"
+          echo "   1. Vuelve a ejecutar este workflow"
+          echo "   2. Desactiva 'dry_run' (ponlo en false)"
+
+      - name: 📤 Create PRs in student repos
+        if: inputs.dry_run == false
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "📤 Creando PRs en repositorios de estudiantes..."
+          
+          CURRENT_BRANCH="${{ github.ref_name }}"
+          CREATED=0
+          FAILED=0
+          
+          while read -r repo; do
+            if [ -z "$repo" ]; then continue; fi
+            
+            echo "🔄 Procesando: $repo"
+            
+            # Crear PR usando la rama actual
+            RESULT=$(curl -s -w "%{http_code}" \
+              -X POST \
+              -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+              -H "Accept: application/vnd.github.v3+json" \
+              "https://api.github.com/repos/${{ github.repository_owner }}/$repo/pulls" \
+              -d "{
+                \"title\": \"🔧 Template Updates - Sistema Mejorado\",
+                \"body\": \"## 🔧 Actualizaciones del Template\n\n### ✅ Mejoras Incluidas:\n- **Kata-1 limpio**: Sin archivos innecesarios\n- **Kata-2 corregido**: Estructura .NET completa\n- **Tests optimizados**: Solo 2 ejemplos por kata\n- **Workflow mejorado**: Desbloqueo automático corregido\n\n### 🎯 Beneficios:\n- Mejor experiencia TDD\n- Sistema más confiable\n- Menos confusión\n\n### 📋 Acción:\n**Acepta este PR** para recibir las mejoras.\n\n*Tu progreso actual se mantiene intacto.*\",
+                \"head\": \"${{ github.repository_owner }}:$CURRENT_BRANCH\",
+                \"base\": \"main\"
+              }")
+            
+            HTTP_CODE="\${RESULT: -3}"
+            
+            if [ "$HTTP_CODE" = "201" ]; then
+              echo "  ✅ PR creado exitosamente"
+              CREATED=$((CREATED + 1))
+            elif [ "$HTTP_CODE" = "422" ]; then
+              echo "  ⚠️  PR ya existe o sin cambios"
+            else
+              echo "  ❌ Error: HTTP $HTTP_CODE"
+              FAILED=$((FAILED + 1))
+            fi
+            
+            sleep 1  # Evitar rate limiting
+            
+          done < repos.txt
+          
+          echo ""
+          echo "📊 Resumen:"
+          echo "  - PRs creados: $CREATED"
+          echo "  - Errores: $FAILED"
+          echo "  - Total procesados: ${{ steps.find-repos.outputs.count }}"
+
+      - name: 🎉 Summary
+        run: |
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            echo "🔍 Dry run completado - revisa los logs arriba"
+          else
+            echo "🎉 Sincronización completada!"
+            echo ""
+            echo "📋 Los estudiantes ahora:"
+            echo "  1. Recibirán notificación de PR"
+            echo "  2. Pueden revisar los cambios"
+            echo "  3. Al aceptar, obtienen las mejoras"
+            echo "  4. Su progreso se mantiene"
+          fi

@@ -18,9 +18,10 @@ on:
         default: false
 
 permissions:
-  contents: read
-  pull-requests: write
+  contents: write         # Necesario para crear ramas y hacer push
+  pull-requests: write    # Necesario para crear PRs
   repository-projects: write
+  actions: read           # Para leer workflows
 
 jobs:
   sync-to-students:
@@ -58,22 +59,28 @@ jobs:
           echo "repo_count=$REPO_COUNT" >> $GITHUB_OUTPUT
           echo "repos_found=true" >> $GITHUB_OUTPUT
 
-      - name: 🌿 Create sync branch
-        id: create-branch
+      - name: 🌿 Use existing sync branch or current
+        id: setup-branch
         run: |
-          BRANCH_NAME="template-sync-$(date +%Y%m%d-%H%M%S)"
+          # Usar la rama actual si ya es una rama de sync, o master
+          CURRENT_BRANCH=$(git branch --show-current)
           
-          echo "🌿 Creando rama: $BRANCH_NAME"
-          git checkout -b $BRANCH_NAME
-          git push origin $BRANCH_NAME
+          if [[ "$CURRENT_BRANCH" == template-fixes-* ]] || [[ "$CURRENT_BRANCH" == template-sync-* ]]; then
+            BRANCH_NAME="$CURRENT_BRANCH"
+            echo "🔄 Usando rama existente: $BRANCH_NAME"
+          else
+            BRANCH_NAME="template-sync-$(date +%Y%m%d-%H%M%S)"
+            echo "🌿 Creando nueva rama: $BRANCH_NAME"
+            git checkout -b $BRANCH_NAME
+          fi
           
           echo "branch_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
-          echo "✅ Rama creada: $BRANCH_NAME"
+          echo "✅ Rama configurada: $BRANCH_NAME"
 
       - name: 📤 Create PRs for students
         if: inputs.dry_run == false
         run: |
-          BRANCH_NAME="${{ steps.create-branch.outputs.branch_name }}"
+          BRANCH_NAME="${{ steps.setup-branch.outputs.branch_name }}"
           TOTAL_REPOS=${{ steps.get-repos.outputs.repo_count }}
           CREATED_PRS=0
           FAILED_PRS=0
@@ -128,7 +135,7 @@ jobs:
       - name: 🔍 Dry run - Show what would happen
         if: inputs.dry_run == true
         run: |
-          BRANCH_NAME="${{ steps.create-branch.outputs.branch_name }}"
+          BRANCH_NAME="${{ steps.setup-branch.outputs.branch_name }}"
           TOTAL_REPOS=${{ steps.get-repos.outputs.repo_count }}
           
           echo "🔍 DRY RUN - Mostrando qué se haría:"
