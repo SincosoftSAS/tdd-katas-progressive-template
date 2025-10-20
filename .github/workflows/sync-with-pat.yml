@@ -107,8 +107,19 @@ jobs:
             
             echo "🔄 $repo"
             
+            # Verificar acceso al repo del estudiante
+            if ! gh repo view "${{ github.repository_owner }}/$repo" --json name >/dev/null 2>&1; then
+              echo "  ❌ No se puede acceder al repositorio"
+              FAILED=$((FAILED + 1))
+              continue
+            fi
+            
+            # Detectar branch por defecto del repo estudiante
+            DEFAULT_BRANCH=$(gh repo view "${{ github.repository_owner }}/$repo" --json defaultBranch --jq '.defaultBranch' 2>/dev/null || echo "main")
+            echo "  📋 Branch por defecto: $DEFAULT_BRANCH"
+            
             # Verificar si ya existe un PR
-            EXISTING_PR=$(gh pr list --repo "${{ github.repository_owner }}/$repo" --head "${{ github.repository_owner }}:${{ github.ref_name }}" --json number --jq '.[0].number // empty' 2>/dev/null || echo "")
+            EXISTING_PR=$(gh pr list --repo "${{ github.repository_owner }}/$repo" --head "${{ github.repository_owner }}:master" --json number --jq '.[0].number // empty' 2>/dev/null || echo "")
             
             if [ -n "$EXISTING_PR" ]; then
               echo "  ⚠️  PR #$EXISTING_PR ya existe"
@@ -116,28 +127,23 @@ jobs:
             fi
             
             # Intentar crear PR
-            if gh pr create \
+            echo "  🔍 Verificando branches disponibles..."
+            gh api "repos/${{ github.repository_owner }}/$repo/branches" --jq '.[].name' | head -3
+            
+            echo "  🔍 Intentando crear PR..."
+            if OUTPUT=$(gh pr create \
               --repo "${{ github.repository_owner }}/$repo" \
               --title "🔧 Template Updates - Sistema Mejorado" \
               --body-file pr_body.txt \
-              --head "${{ github.repository_owner }}:${{ github.ref_name }}" \
-              --base "main" 2>/dev/null; then
-              echo "  ✅ PR creado exitosamente"
+              --head "${{ github.repository_owner }}:master" \
+              --base "$DEFAULT_BRANCH" 2>&1); then
+              echo "  ✅ PR creado exitosamente (base: $DEFAULT_BRANCH)"
+              echo "  📋 $OUTPUT"
               SUCCESS=$((SUCCESS + 1))
             else
-              # Intentar con base "master" si "main" falla
-              if gh pr create \
-                --repo "${{ github.repository_owner }}/$repo" \
-                --title "🔧 Template Updates - Sistema Mejorado" \
-                --body-file pr_body.txt \
-                --head "${{ github.repository_owner }}:${{ github.ref_name }}" \
-                --base "master" 2>/dev/null; then
-                echo "  ✅ PR creado exitosamente (base: master)"
-                SUCCESS=$((SUCCESS + 1))
-              else
-                echo "  ❌ Error creando PR"
-                FAILED=$((FAILED + 1))
-              fi
+              echo "  ❌ Error creando PR:"
+              echo "     $OUTPUT"
+              FAILED=$((FAILED + 1))
             fi
             
             sleep 2
