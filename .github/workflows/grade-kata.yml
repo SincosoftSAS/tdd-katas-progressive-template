@@ -10,6 +10,8 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  statuses: write
+  issues: write
 
 jobs:
   grade:
@@ -324,24 +326,38 @@ jobs:
           KATA_NUMBER: ${{ steps.detect.outputs.kata_number }}
           KATA_NAME: ${{ steps.detect.outputs.kata_name }}
         run: |
+          echo "🔍 Debug info:"
+          echo "  Repository: ${{ github.repository }}"
+          echo "  SHA: ${{ github.sha }}"
+          echo "  Test result: ${{ steps.test.outputs.result }}"
+          echo "  Kata: ${KATA_NUMBER}"
+          
           if [ "${{ steps.test.outputs.result }}" == "success" ]; then
             echo "✅ Setting commit status to success"
-            gh api \
-              --method POST \
-              /repos/${{ github.repository }}/statuses/${{ github.sha }} \
-              -f state='success' \
-              -f target_url='${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}' \
-              -f description='All tests passed! Kata ${{ steps.detect.outputs.kata_number }} completed 🎉' \
-              -f context='TDD Kata Evaluation'
+            RESPONSE=$(curl -s -w "\nHTTP_CODE:%{http_code}" -X POST \
+              -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+              -H "Accept: application/vnd.github.v3+json" \
+              "https://api.github.com/repos/${{ github.repository }}/statuses/${{ github.sha }}" \
+              -d "{
+                \"state\": \"success\",
+                \"target_url\": \"${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\",
+                \"description\": \"All tests passed! Kata ${KATA_NUMBER} completed 🎉\",
+                \"context\": \"TDD Kata Evaluation\"
+              }")
+            echo "API Response: $RESPONSE"
           else
             echo "❌ Setting commit status to failure"
-            gh api \
-              --method POST \
-              /repos/${{ github.repository }}/statuses/${{ github.sha }} \
-              -f state='failure' \
-              -f target_url='${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}' \
-              -f description='Tests failed - check logs and issue for guidance' \
-              -f context='TDD Kata Evaluation'
+            RESPONSE=$(curl -s -w "\nHTTP_CODE:%{http_code}" -X POST \
+              -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+              -H "Accept: application/vnd.github.v3+json" \
+              "https://api.github.com/repos/${{ github.repository }}/statuses/${{ github.sha }}" \
+              -d "{
+                \"state\": \"failure\",
+                \"target_url\": \"${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\",
+                \"description\": \"Tests failed - check logs and issue for guidance\",
+                \"context\": \"TDD Kata Evaluation\"
+              }")
+            echo "API Response: $RESPONSE"
           fi
       
       - name: Add commit comment with results
