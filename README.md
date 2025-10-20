@@ -1,133 +1,89 @@
 # 🎯 TDD Journey - Progressive Katas
 
-Welcome to your personal TDD learning journey!
+Welcome to your personal TDD learning journey! Master Test-Driven Development by completing katas one at a time.
 
-## 📖 What is This?
+## 📁 Simple Structure
 
-Complete coding katas one at a time, unlocking new ones as you progress.
-
-## 📊 Your Progress
-
-**👉 Check your detailed progress dashboard: [`PROGRESS.md`](PROGRESS.md)**
-
-### 🔓 Current Kata
-
-**Kata 01: FizzBuzz** - You're here! 🎯
-
-### 🔒 Locked Katas
-
-_Complete current kata to unlock the next one..._
-
-### ✅ Completed Katas
-
-_No katas completed yet. Start with Kata 01!_
-
----
+```
+katas/
+├── kata-1/          # 🔓 UNLOCKED - Start here!
+│   ├── README.md    # Instructions  
+│   ├── src/         # Your code
+│   └── tests/       # Tests
+├── kata-2/          # 🔒 Unlocks when kata-1 is complete
+├── kata-3/          # 🔒 And so on...
+└── ...
+```
 
 ## 🚀 Getting Started
 
 ```bash
-# Clone this repository
-git clone YOUR_REPO_URL
-cd YOUR_REPO
+# Work on current kata
+cd katas/kata-1
 
-# Install feedback hooks (RECOMMENDED)
-./install-hooks.sh         # Linux/Mac
-# OR
-install-hooks.bat          # Windows
-
-# Restore dependencies
-dotnet restore
-
-# Build the project
-dotnet build
-
-# Run tests (they should fail initially - that's expected!)
+# Run tests (should fail initially - that's TDD!)
 dotnet test
+
+# Write code in src/ to make tests pass
+# Follow: Red → Green → Refactor
+
+# When all tests pass, kata-2 unlocks automatically!
 ```
 
----
-
-## � **¿Cómo recibo feedback?**
-
-Tenemos **múltiples canales** para darte feedback inmediato:
-
-### ⚡ **Feedback Pre-commit** (Instala hooks)
-- 🔍 Tests automáticos **antes** de commit
-- ❌ Te detiene si hay tests fallidos
-- 💡 Feedback inmediato en terminal
-
-### 📊 **Feedback Post-push**
-- ✅ Commit status visible en GitHub
-- 💬 Comentarios automáticos en commits
-- 📋 Issues automáticos si fallan tests
-- 📊 Dashboard visual actualizado
-
-**👉 [Guía completa de feedback](FEEDBACK-SISTEMA.md)**
-
----
-
-## 📖 Kata Instructions
-
-Read the complete instructions here:
-- **File**: `.github/kata-definitions/kata-01-fizzbuzz.md`
-- Or view it on GitHub in your repository
-
-**Quick Summary**: Implement a function that returns a list from 1 to n, replacing multiples of 3 with "Fizz", multiples of 5 with "Buzz", and multiples of 15 with "FizzBuzz".
-
----
-
-## 💻 Working on This Kata
+## 💻 Working on a Kata
 
 ### TDD Workflow (Red → Green → Refactor)
 
-1. **Read the requirements** in `.github/kata-definitions/kata-01-fizzbuzz.md`
-2. **Run tests**: `dotnet test` (they should fail - Red ❌)
-3. **Write minimal code** in `FizzBuzz/FizzBuzz.cs` to make tests pass
-4. **Run tests again**: `dotnet test` (they should pass - Green ✅)
-5. **Refactor** your code to improve it
-6. **Repeat** until all requirements are met
+1. **Read**: Check the kata's `README.md` for instructions
+2. **Red**: Run `dotnet test` - tests should fail ❌
+3. **Green**: Write minimal code to make tests pass ✅
+4. **Refactor**: Improve code while keeping tests green 🔄
+5. **Repeat**: Until all requirements are met
 
-### Files to Edit
+### Automatic Features
 
-- `FizzBuzz/FizzBuzz.cs` - Your implementation goes here
-- `FizzBuzz.Tests/FizzBuzzTests.cs` - Add more tests as you progress
+- ✅ **Commit Status**: See results directly on GitHub
+- 📋 **Auto Issues**: Get help when tests fail  
+- 🔓 **Auto Unlock**: Next kata appears when current is complete
+- 📊 **Progress Tracking**: `.github/progress.json` keeps score
 
-### When You're Done
+## 🔄 Simple Workflow
 
 ```bash
-# Commit your work (hooks run tests automatically if installed)
-git add .
-git commit -m "Implement FizzBuzz kata"
+# 1. Work on current kata
+cd katas/kata-1
 
-# Push to trigger evaluation
+# 2. Follow TDD cycle
+dotnet test          # See failing tests
+# Write code in src/
+dotnet test          # See tests pass
+
+# 3. Push when ready
+git add .
+git commit -m "Complete kata-1"
 git push origin master
+
+# 4. Next kata unlocks automatically! 🎉
 ```
 
-**GitHub Actions** will:
-- ✅ Run your tests
-- ✅ Run additional hidden tests  
-- ✅ Give you immediate feedback in multiple channels
-- ✅ If all pass: Unlock Kata 02 automatically! 🎉
+## 📊 Your Progress
 
----
+- **Current kata**: Check `.github/progress.json`
+- **Completed katas**: Shown in same file
+- **Visual feedback**: Commit status on GitHub
+- **Help**: Auto-created issues when tests fail
 
 ## 🎓 Learning Objectives
 
-- Practice Test-Driven Development (TDD)
+- Master Test-Driven Development (TDD)
 - Learn the Red-Green-Refactor cycle
 - Experience incremental development
 - Build confidence with automated testing
 
----
+## 📚 Optional Enhancements
 
-## 📚 Resources
-
-- **Feedback System**: [`FEEDBACK-SISTEMA.md`](FEEDBACK-SISTEMA.md) - How to get immediate feedback
-- **Progress Dashboard**: [`PROGRESS.md`](PROGRESS.md) - See your journey, badges, and tips
-- **Kata Instructions**: `.github/kata-definitions/kata-01-fizzbuzz.md`
-- **Your Code**: `FizzBuzz/FizzBuzz.cs`
-- **Tests**: `FizzBuzz.Tests/FizzBuzzTests.cs`
+- **Pre-commit hooks**: Install with `./install-hooks.sh` for local feedback
+- **Detailed feedback**: See `FEEDBACK-SISTEMA.md` for all feedback channels
 
 ---
 
