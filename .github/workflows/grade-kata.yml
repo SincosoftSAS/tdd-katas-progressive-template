@@ -50,20 +50,78 @@ jobs:
       - name: Run tests
         id: test
         run: |
-          cd katas/kata-${{ steps.kata.outputs.number }}
+          KATA_NUM=${{ steps.kata.outputs.number }}
+          echo "🎯 Testing Kata $KATA_NUM with server tests..."
           
-          echo "🔨 Building..."
-          dotnet build --verbosity quiet
-          
-          echo "🧪 Running tests..."
-          if dotnet test --verbosity quiet --logger "console;verbosity=detailed" > ../../test-output.txt 2>&1; then
-            echo "result=success" >> $GITHUB_OUTPUT
-            echo "✅ All tests passed!"
-          else
+          # Verificar que existe la kata actual
+          if [ ! -d "katas/kata-$KATA_NUM" ]; then
+            echo "❌ Kata $KATA_NUM directory not found"
             echo "result=failure" >> $GITHUB_OUTPUT
-            echo "❌ Some tests failed"
-            cat ../../test-output.txt
+            exit 1
           fi
+          
+          # Verificar que existen las pruebas del servidor
+          if [ ! -d ".github/server-tests/kata-$KATA_NUM" ]; then
+            echo "❌ Server tests for kata-$KATA_NUM not found"
+            echo "result=failure" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+          
+          cd "katas/kata-$KATA_NUM"
+          
+          echo "🔨 Building student solution..."
+          if ! dotnet build --verbosity quiet; then
+            echo "❌ Build failed"
+            echo "result=failure" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+          
+          echo "🧪 Running student tests (quick check)..."
+          dotnet test --verbosity quiet --logger "console;verbosity=minimal" || echo "ℹ️ Student tests may fail (TDD process)"
+          
+          echo ""
+          echo "🔍 Running SERVER TESTS (comprehensive evaluation)..."
+          
+          # Copiar las pruebas del servidor a un directorio temporal
+          cd ../../
+          mkdir -p temp-server-tests/kata-$KATA_NUM
+          
+          # Copiar el código del estudiante
+          cp -r "katas/kata-$KATA_NUM"/* "temp-server-tests/kata-$KATA_NUM/"
+          
+          # Copiar las pruebas del servidor
+          cp -r ".github/server-tests/kata-$KATA_NUM"/* "temp-server-tests/kata-$KATA_NUM/"
+          
+          cd "temp-server-tests/kata-$KATA_NUM"
+          
+          echo "📋 Server tests configuration:"
+          ls -la *.cs 2>/dev/null || echo "No .cs files found"
+          
+          # Ejecutar las pruebas del servidor
+          if dotnet test --verbosity normal --logger "console;verbosity=detailed" > ../../server-test-output.txt 2>&1; then
+            echo "✅ ALL SERVER TESTS PASSED! Kata $KATA_NUM completed successfully"
+            echo "result=success" >> $GITHUB_OUTPUT
+            
+            # Mostrar resumen
+            echo ""
+            echo "📊 Test Results Summary:"
+            grep -E "(Passed|Failed|Skipped)" ../../server-test-output.txt || echo "Could not parse results"
+            
+          else
+            echo "❌ SERVER TESTS FAILED - Kata $KATA_NUM not yet complete"
+            echo "result=failure" >> $GITHUB_OUTPUT
+            
+            echo ""
+            echo "📋 Failed server tests details:"
+            cat ../../server-test-output.txt
+            
+            echo ""
+            echo "💡 Keep implementing using TDD until all functionality is complete!"
+          fi
+          
+          # Limpiar
+          cd ../../
+          rm -rf temp-server-tests
 
       - name: Update progress on success
         if: steps.test.outputs.result == 'success'
@@ -135,8 +193,8 @@ jobs:
         run: |
           KATA_NUM=${{ steps.kata.outputs.number }}
           
-          # Create issue with simple body
+          # Create issue with detailed guidance
           gh issue create \
-            --title "❌ Kata $KATA_NUM: Tests Failed" \
-            --body "Your tests didn't pass. Run 'dotnet test' in katas/kata-$KATA_NUM to see details. Follow TDD cycle and push again!" \
+            --title "❌ Kata $KATA_NUM: Server Tests Failed" \
+            --body "🧪 Server tests failed - Your kata is not yet complete. Your code compiles but doesn't pass the comprehensive server tests. Continue implementing ALL required functionality using TDD. Run 'dotnet test' in katas/kata-$KATA_NUM and push again when complete!" \
             --assignee "${{ github.actor }}"
