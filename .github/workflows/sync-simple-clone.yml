@@ -1,0 +1,134 @@
+name: 🔄 Sync to Students (Clone Method)
+
+on:
+  workflow_dispatch:
+    inputs:
+      assignment_prefix:
+        description: 'Prefijo de repos estudiantes'
+        required: true
+        default: 'katas-tdd'
+      dry_run:
+        description: 'Solo mostrar repos (no crear PRs)'
+        type: boolean
+        default: true
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 🔧 Setup GitHub CLI with PAT
+        run: |
+          if [ -n "${{ secrets.PAT_TOKEN }}" ]; then
+            echo "✅ Usando Personal Access Token"
+            gh auth login --with-token <<< "${{ secrets.PAT_TOKEN }}"
+          else
+            echo "❌ PAT_TOKEN no configurado"
+            exit 1
+          fi
+
+      - name: 🔍 Find student repos
+        id: find
+        run: |
+          echo "🔍 Buscando repos con prefijo: ${{ inputs.assignment_prefix }}"
+          
+          gh repo list ${{ github.repository_owner }} \
+            --json name \
+            --jq '.[] | select(.name | contains("katas-tdd")) | select(.name != "tdd-katas-progressive-template") | select(.name | endswith("-template") | not) | .name' \
+            > student_repos.txt
+          
+          TOTAL=$(cat student_repos.txt | wc -l)
+          echo "✅ Encontrados: $TOTAL repos"
+          echo "total=$TOTAL" >> $GITHUB_OUTPUT
+
+      - name: 📋 Show repos (dry run)
+        if: inputs.dry_run
+        run: |
+          echo "🔍 DRY RUN - Repos que recibirían PRs:"
+          echo "======================================"
+          cat student_repos.txt | while read repo; do
+            [ -n "$repo" ] && echo "  📁 ${{ github.repository_owner }}/$repo"
+          done
+          echo ""
+          echo "📊 Total: ${{ steps.find.outputs.total }} repositorios"
+
+      - name: 📤 Sync repos
+        if: inputs.dry_run == false
+        run: |
+          echo "📤 Sincronizando repositorios..."
+          
+          # Configurar git
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
+          
+          UPDATE_BRANCH="template-updates-$(date +%Y%m%d-%H%M%S)"
+          echo "🔧 Branch para PRs: $UPDATE_BRANCH"
+          
+          SUCCESS=0
+          FAILED=0
+          
+          while read repo; do
+            [ -z "$repo" ] && continue
+            
+            echo ""
+            echo "🔄 Procesando: $repo"
+            
+            # Limpiar y clonar
+            rm -rf temp_repo
+            if ! git clone "https://x-access-token:${{ secrets.PAT_TOKEN }}@github.com/${{ github.repository_owner }}/$repo.git" temp_repo; then
+              echo "  ❌ Error clonando"
+              FAILED=$((FAILED + 1))
+              continue
+            fi
+            
+            cd temp_repo
+            
+            # Crear branch y aplicar cambios
+            git checkout -b "$UPDATE_BRANCH"
+            
+            # Copiar archivos del template
+            if [ -d "../katas/kata-1" ]; then
+              echo "  📋 Copiando kata-1..."
+              rm -rf katas/kata-1/* 2>/dev/null || true
+              cp -r ../katas/kata-1/* katas/kata-1/ 2>/dev/null || true
+            fi
+            
+            # Verificar cambios
+            if git diff --quiet && git diff --cached --quiet; then
+              echo "  ℹ️  Sin cambios"
+              cd ..
+              continue
+            fi
+            
+            # Commit y push
+            git add .
+            git commit -m "Template updates - Sistema mejorado"
+            
+            if git push origin "$UPDATE_BRANCH"; then
+              # Crear PR
+              if gh pr create \
+                --title "🔧 Template Updates" \
+                --body "Actualizaciones del template con mejoras" \
+                --base master \
+                --head "$UPDATE_BRANCH"; then
+                echo "  ✅ PR creado"
+                SUCCESS=$((SUCCESS + 1))
+              else
+                echo "  ❌ Error creando PR"
+                FAILED=$((FAILED + 1))
+              fi
+            else
+              echo "  ❌ Error en push"
+              FAILED=$((FAILED + 1))
+            fi
+            
+            cd ..
+          done < student_repos.txt
+          
+          echo ""
+          echo "📊 Resultado: $SUCCESS exitosos, $FAILED fallidos"
+
+      - name: 🎉 Done
+        run: |
+          echo "🎉 Proceso completado"
