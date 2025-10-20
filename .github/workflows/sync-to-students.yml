@@ -27,6 +27,9 @@ jobs:
             echo "❌ PAT_TOKEN no configurado"
             exit 1
           fi
+          
+          # Instalar jq para parsear JSON
+          sudo apt-get update && sudo apt-get install -y jq
 
       - name: 🔍 Find student repos
         id: find
@@ -68,52 +71,7 @@ jobs:
           SUCCESS=0
           FAILED=0
           
-          # Función para verificar si una kata tiene trabajo del estudiante
-          has_student_work() {
-            local kata_dir="$1"
-            if [ ! -d "$kata_dir" ]; then
-              echo "    🔍 Debug: $kata_dir no existe"
-              return 1  # No existe
-            fi
-            
-            echo "    🔍 Debug: Analizando $kata_dir"
-            
-            # Buscar archivos .cs que no sean tests
-            local cs_files=$(find "$kata_dir" -name "*.cs" -not -name "*Tests.cs" 2>/dev/null)
-            local file_count=0
-            
-            for file in $cs_files; do
-              if [ -f "$file" ]; then
-                file_count=$((file_count + 1))
-                echo "    🔍 Debug: Revisando archivo $(basename "$file")"
-                
-                # Verificar contenido del archivo
-                local content=$(cat "$file" 2>/dev/null || echo "")
-                local lines=$(echo "$content" | wc -l)
-                echo "    🔍 Debug: Líneas: $lines"
-                
-                # Si no contiene NotImplementedException, definitivamente tiene trabajo
-                if ! echo "$content" | grep -q "throw new NotImplementedException" 2>/dev/null; then
-                  echo "    🔍 Debug: No tiene NotImplementedException - TIENE TRABAJO"
-                  return 0  # Tiene trabajo
-                fi
-                
-                # Verificar si solo tiene el código template básico
-                # Contar líneas que no sean espacios, comentarios o NotImplementedException
-                local meaningful_lines=$(echo "$content" | grep -v "^\s*$" | grep -v "^\s*//" | grep -v "throw new NotImplementedException" | grep -v "^\s*{" | grep -v "^\s*}" | wc -l)
-                echo "    🔍 Debug: Líneas significativas: $meaningful_lines"
-                
-                # Si tiene más de 5 líneas significativas además del template, probablemente tiene trabajo
-                if [ "$meaningful_lines" -gt 5 ]; then
-                  echo "    🔍 Debug: Muchas líneas significativas - POSIBLE TRABAJO"
-                  return 0  # Probablemente tiene trabajo
-                fi
-              fi
-            done
-            
-            echo "    🔍 Debug: $file_count archivos analizados - SIN TRABAJO DETECTADO"
-            return 1  # Sin trabajo significativo
-          }
+
           
           while read repo; do
             [ -z "$repo" ] && continue
@@ -132,45 +90,92 @@ jobs:
             cd temp_repo
             git checkout -b "$UPDATE_BRANCH"
             
-            # Analizar qué katas están desbloqueadas
+            # Leer progreso del estudiante desde progress.json
+            if [ -f ".github/progress.json" ]; then
+              CURRENT_KATA=$(cat .github/progress.json | jq -r '.current_kata // 1')
+              COMPLETED_KATAS=$(cat .github/progress.json | jq -r '.completed_katas[]' 2>/dev/null | tr '\n' ' ' || echo "")
+              echo "  📋 Progreso del estudiante:"
+              echo "    🎯 Kata actual: $CURRENT_KATA"
+              echo "    ✅ Katas completadas: $COMPLETED_KATAS"
+            else
+              echo "  ⚠️  No se encontró progress.json - asumiendo kata 1"
+              CURRENT_KATA=1
+              COMPLETED_KATAS=""
+            fi
+            
+            # Determinar qué katas están disponibles/desbloqueadas
             UNLOCKED_KATAS=""
             for kata_num in 1 2 3 4 5; do
-              if [ -d "katas/kata-$kata_num" ]; then
+              if [ $kata_num -le $CURRENT_KATA ]; then
                 UNLOCKED_KATAS="$UNLOCKED_KATAS kata-$kata_num"
               fi
             done
             echo "  📋 Katas desbloqueadas:$UNLOCKED_KATAS"
             
-            # Aplicar actualizaciones inteligentes
+            # Aplicar actualizaciones basadas en progreso
             SYNC_CHANGES=0
             
-            # Kata-1: Actualizar si no tiene trabajo del estudiante
-            if echo "$UNLOCKED_KATAS" | grep -q "kata-1" && [ -d "../katas/kata-1" ]; then
-              if has_student_work "katas/kata-1"; then
-                echo "  ⚠️  Kata-1: Conservando trabajo del estudiante"
-              else
-                echo "  🔄 Kata-1: Actualizando (sin trabajo previo)"
-                rm -rf katas/kata-1/* 2>/dev/null || true
-                cp -r ../katas/kata-1/* katas/kata-1/ 2>/dev/null || true
-                SYNC_CHANGES=1
+            # Lógica de sincronización inteligente
+            for kata_num in 1 2 3 4 5; do
+              if echo "$UNLOCKED_KATAS" | grep -q "kata-$kata_num"; then
+                
+                # Determinar el template source
+                if [ $kata_num -eq 1 ] && [ -d "../katas/kata-1" ]; then
+                  TEMPLATE_SOURCE="../katas/kata-1"
+                elif [ $kata_num -gt 1 ] && [ -d "../.github/kata-templates/kata-$kata_num" ]; then
+                  TEMPLATE_SOURCE="../.github/kata-templates/kata-$kata_num"
+                else
+                  continue  # No hay template para esta kata
+                fi
+                
+                KATA_DIR="katas/kata-$kata_num"
+                
+                # Decidir acción basada en progreso
+                if echo " $COMPLETED_KATAS " | grep -q " $kata_num "; then
+                  echo "  ✅ Kata-$kata_num: COMPLETADA - no tocar"
+                  
+                elif [ $kata_num -eq $CURRENT_KATA ]; then
+                  echo "  🎯 Kata-$kata_num: ACTIVA - actualizar template pero conservar trabajo"
+                  
+                  # Para kata activa: siempre actualizar el template
+                  if [ ! -d "$KATA_DIR" ]; then
+                    echo "    🆕 Creando kata activa"
+                    cp -r "$TEMPLATE_SOURCE" "$KATA_DIR" 2>/dev/null || true
+                    SYNC_CHANGES=1
+                  else
+                    echo "    🔄 Actualizando template de kata activa"
+                    # Respaldar archivos del estudiante (los que no son template)
+                    find "$KATA_DIR" -name "*.cs" -not -name "*Tests.cs" -exec cp {} {}.backup \; 2>/dev/null || true
+                    
+                    # Actualizar template completo
+                    rm -rf "$KATA_DIR"/* 2>/dev/null || true
+                    cp -r "$TEMPLATE_SOURCE"/* "$KATA_DIR"/ 2>/dev/null || true
+                    
+                    # Restaurar trabajo del estudiante si existe
+                    for backup in "$KATA_DIR"/*.backup 2>/dev/null; do
+                      [ -f "$backup" ] && mv "$backup" "${backup%.backup}" 2>/dev/null || true
+                    done
+                    
+                    SYNC_CHANGES=1
+                  fi
+                  
+                elif [ $kata_num -lt $CURRENT_KATA ]; then
+                  echo "  🟢 Kata-$kata_num: ANTERIOR - solo crear si no existe"
+                  
+                  if [ ! -d "$KATA_DIR" ]; then
+                    echo "    🆕 Creando kata anterior faltante"
+                    cp -r "$TEMPLATE_SOURCE" "$KATA_DIR" 2>/dev/null || true
+                    SYNC_CHANGES=1
+                  else
+                    echo "    ℹ️  Kata anterior ya existe - no tocar"
+                  fi
+                  
+                else
+                  echo "  🔒 Kata-$kata_num: FUTURA - no disponible aún"
+                fi
+                
               fi
-            fi
-            
-            # Kata-2: Crear si está desbloqueada pero no tiene trabajo
-            if echo "$UNLOCKED_KATAS" | grep -q "kata-2" && [ -d "../.github/kata-templates/kata-2" ]; then
-              if [ ! -d "katas/kata-2" ]; then
-                echo "  🆕 Kata-2: Creando nueva kata"
-                cp -r ../.github/kata-templates/kata-2 katas/kata-2 2>/dev/null || true
-                SYNC_CHANGES=1
-              elif has_student_work "katas/kata-2"; then
-                echo "  ⚠️  Kata-2: Conservando trabajo del estudiante"
-              else
-                echo "  🔄 Kata-2: Actualizando (sin trabajo previo)"
-                rm -rf katas/kata-2/* 2>/dev/null || true
-                cp -r ../.github/kata-templates/kata-2/* katas/kata-2/ 2>/dev/null || true
-                SYNC_CHANGES=1
-              fi
-            fi
+            done
             
             # Sistema: Siempre actualizar (workflows, server tests)
             echo "  🔧 Actualizando sistema..."
@@ -194,12 +199,12 @@ jobs:
             
             # Commit y push
             git add .
-            git commit -m "🔧 Template Updates (Smart Sync) - Respeta trabajo existente, actualiza sistema"
+            git commit -m "🔧 Template Updates (Progress-Based Sync) - Actualiza kata activa, conserva completadas, actualiza sistema"
             
             if git push origin "$UPDATE_BRANCH"; then
               if gh pr create \
-                --title "🔧 Template Updates (Smart Sync)" \
-                --body "Sincronización inteligente: Actualiza sistema y workflows respetando tu trabajo existente. Solo modifica katas sin código previo. Tu progreso se mantiene intacto." \
+                --title "🔧 Template Updates (Progress-Based)" \
+                --body "Sincronización basada en progress.json: Actualiza kata activa conservando tu trabajo, no toca katas completadas, actualiza sistema." \
                 --base master \
                 --head "$UPDATE_BRANCH"; then
                 echo "  ✅ PR creado con sincronización inteligente"
