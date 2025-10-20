@@ -6,7 +6,7 @@ on:
       assignment_prefix:
         description: 'Prefijo de repos estudiantes'
         required: true
-        default: 'tdd-katas'
+        default: 'katas-tdd'
       dry_run:
         description: 'Solo mostrar repos (no crear PRs)'
         type: boolean
@@ -27,11 +27,11 @@ jobs:
         run: |
           echo "🔍 Buscando repos con prefijo: ${{ inputs.assignment_prefix }}"
           
-          # Obtener repos de la org, filtrar por prefijo y excluir template
+          # Obtener repos que contienen "katas-tdd" y excluir templates
           curl -s \
             -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
             "https://api.github.com/orgs/${{ github.repository_owner }}/repos?per_page=100" \
-            | jq -r '.[] | select(.name | startswith("${{ inputs.assignment_prefix }}")) | select(.name != "tdd-katas-progressive-template") | .name' \
+            | jq -r '.[] | select(.name | contains("katas-tdd")) | select(.name != "tdd-katas-progressive-template") | select(.name | endswith("-template") | not) | .name' \
             > student_repos.txt
           
           TOTAL=$(cat student_repos.txt | wc -l)
