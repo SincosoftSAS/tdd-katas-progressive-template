@@ -1,4 +1,4 @@
-name: 🔄 Sync Template to Students
+name: 🔄 Auto-Sync Template to Students
 
 on:
   workflow_dispatch:
@@ -8,7 +8,7 @@ on:
         required: true
         default: 'katas-tdd'
       dry_run:
-        description: 'Solo mostrar repos (no crear PRs)'
+        description: 'Solo mostrar repos (no hacer cambios)'
         type: boolean
         default: true
 
@@ -48,25 +48,24 @@ jobs:
       - name: 📋 Show repos (dry run)
         if: inputs.dry_run
         run: |
-          echo "🔍 DRY RUN - Repos que recibirían PRs:"
-          echo "======================================"
+          echo "🔍 DRY RUN - Repos que serían sincronizados:"
+          echo "==========================================="
           cat student_repos.txt | while read repo; do
             [ -n "$repo" ] && echo "  📁 ${{ github.repository_owner }}/$repo"
           done
           echo ""
           echo "📊 Total: ${{ steps.find.outputs.total }} repositorios"
 
-      - name: 📤 Smart Sync
+      - name: 📤 Auto Sync
         if: inputs.dry_run == false
         run: |
-          echo "📤 Sincronización inteligente iniciada..."
+          echo "📤 Sincronización automática iniciada..."
           
           # Configurar git
           git config --global user.name "GitHub Actions"
           git config --global user.email "actions@github.com"
           
-          UPDATE_BRANCH="template-updates-$(date +%Y%m%d-%H%M%S)"
-          echo "🔧 Branch para PRs: $UPDATE_BRANCH"
+          echo "🔧 Sincronización directa a master (sin PRs)"
           
           SUCCESS=0
           FAILED=0
@@ -88,7 +87,7 @@ jobs:
             fi
             
             cd temp_repo
-            git checkout -b "$UPDATE_BRANCH"
+            # Trabajar directamente en master - no crear branch
             
             # Leer progreso del estudiante desde progress.json
             if [ -f ".github/progress.json" ]; then
@@ -206,24 +205,21 @@ jobs:
               continue
             fi
             
-            # Commit y push
+            # Commit y push directo a master (sin PR)
             git add .
-            git commit -m "🔧 Template Updates (Progress-Based Sync) - REEMPLAZA kata activa (trabajo previo en git history), conserva completadas, actualiza sistema"
+            git commit -m "🔧 Auto-sync: Template actualizado automáticamente - Haz git pull para obtener actualizaciones"
             
-            if git push origin "$UPDATE_BRANCH"; then
-              if gh pr create \
-                --title "🔧 Template Updates (Progress-Based)" \
-                --body "🔄 Sincronización basada en progress.json: Katas completadas no se tocan. Kata activa se REEMPLAZA completamente (tu trabajo se guarda en git history). Sistema se actualiza." \
-                --base master \
-                --head "$UPDATE_BRANCH"; then
-                echo "  ✅ PR creado con sincronización inteligente"
+            # Pull primero para evitar conflictos, luego push
+            if git pull --rebase origin master 2>/dev/null || git pull origin master 2>/dev/null; then
+              if git push origin master; then
+                echo "  ✅ Sincronización automática completada"
                 SUCCESS=$((SUCCESS + 1))
               else
-                echo "  ❌ Error creando PR"
+                echo "  ❌ Error en push a master"
                 FAILED=$((FAILED + 1))
               fi
             else
-              echo "  ❌ Error en push"
+              echo "  ❌ Error en pull - posible conflicto"
               FAILED=$((FAILED + 1))
             fi
             
@@ -235,4 +231,4 @@ jobs:
 
       - name: 🎉 Done
         run: |
-          echo "🎉 Sincronización inteligente completada"
+          echo "🎉 Sincronización automática completada (sin PRs)"
