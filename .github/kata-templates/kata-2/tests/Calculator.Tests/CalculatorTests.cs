@@ -1,19 +1,12 @@
-using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Xunit;
 
 namespace Calculator.Tests
 {
-    [TestClass]
     public class CalculatorTests
     {
-        private Calculator _calculator = null!;
+        private readonly Calculator _calculator = new();
 
-        [TestInitialize]
-        public void Setup()
-        {
-            _calculator = new Calculator();
-        }
-
-        [TestMethod]
+        [Fact]
         public void Add_TwoPositiveNumbers_ReturnsSum()
         {
             // Arrange
@@ -24,10 +17,10 @@ namespace Calculator.Tests
             int result = _calculator.Add(a, b);
 
             // Assert
-            Assert.AreEqual(8, result);
+            Assert.Equal(8, result);
         }
 
-        [TestMethod]
+        [Fact]
         public void Subtract_TwoNumbers_ReturnsDifference()
         {
             // Arrange
@@ -38,7 +31,7 @@ namespace Calculator.Tests
             int result = _calculator.Subtract(a, b);
 
             // Assert
-            Assert.AreEqual(6, result);
+            Assert.Equal(6, result);
         }
 
         // TODO: Implementa más tests usando TDD
