@@ -157,12 +157,23 @@ jobs:
                       echo "    💾 Guardando trabajo actual en commit temporal"
                       git add "$KATA_DIR" 2>/dev/null || true
                       git commit -m "💾 Auto-backup: Trabajo en kata-$kata_num antes de sync template" 2>/dev/null || true
+                    else
+                      echo "    ℹ️  No hay trabajo sin commitear en kata-$kata_num"
                     fi
                     
                     # Reemplazar completamente - no intentar preservar estructura modificada
-                    echo "    🔄 Aplicando template actualizado"
+                    echo "    🔄 Aplicando template actualizado desde: $TEMPLATE_SOURCE"
+                    
+                    # Debug: mostrar qué hay antes
+                    echo "    📋 Antes del reemplazo:"
+                    ls -la "$KATA_DIR" 2>/dev/null || echo "    (directorio no existe)"
+                    
                     rm -rf "$KATA_DIR" 2>/dev/null || true
                     cp -r "$TEMPLATE_SOURCE" "$KATA_DIR" 2>/dev/null || true
+                    
+                    # Debug: mostrar qué hay después
+                    echo "    📋 Después del reemplazo:"
+                    ls -la "$KATA_DIR" 2>/dev/null || echo "    (error copiando)"
                     
                     SYNC_CHANGES=1
                   fi
@@ -198,15 +209,18 @@ jobs:
               SYNC_CHANGES=1
             fi
             
-            # Verificar si hay cambios reales
-            if [ "$SYNC_CHANGES" -eq 0 ] || (git diff --quiet && git diff --cached --quiet); then
-              echo "  ℹ️  Sin cambios necesarios"
+            # Verificar si hay cambios reales después de las operaciones
+            git add . 2>/dev/null || true
+            
+            if git diff --cached --quiet; then
+              echo "  ℹ️  Sin cambios reales en el repositorio (template ya actualizado)"
               cd ..
               continue
             fi
             
-            # Commit y push directo a master (sin PR)
-            git add .
+            echo "  📝 Cambios detectados - procediendo con commit"
+            
+            # Commit y push directo a master (sin PR) - git add ya se hizo arriba
             git commit -m "🔧 Auto-sync: Template actualizado automáticamente - Haz git pull para obtener actualizaciones"
             
             # Pull primero para evitar conflictos, luego push
