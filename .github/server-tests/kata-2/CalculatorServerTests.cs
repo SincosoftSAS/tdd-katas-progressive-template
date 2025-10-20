@@ -1,6 +1,6 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
-namespace Calculator.Tests.Server
+namespace Calculator.Tests
 {
     /// <summary>
     /// Tests completos ejecutados en el servidor para evaluación.

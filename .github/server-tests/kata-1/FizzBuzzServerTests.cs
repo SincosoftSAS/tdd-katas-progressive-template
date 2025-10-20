@@ -1,6 +1,7 @@
 using FizzBuzz;
+using Xunit;
 
-namespace FizzBuzz.Tests.Server
+namespace FizzBuzz.Tests
 {
     /// <summary>
     /// Tests completos ejecutados en el servidor para evaluación.

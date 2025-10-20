@@ -82,41 +82,89 @@ jobs:
           echo ""
           echo "🔍 Running SERVER TESTS (comprehensive evaluation)..."
           
-          # Copiar las pruebas del servidor a un directorio temporal
+          # Crear directorio temporal para las pruebas del servidor
           cd ../../
-          mkdir -p temp-server-tests/kata-$KATA_NUM
+          mkdir -p temp-server-tests
           
-          # Copiar el código del estudiante
-          cp -r "katas/kata-$KATA_NUM"/* "temp-server-tests/kata-$KATA_NUM/"
-          
-          # Copiar las pruebas del servidor
-          cp -r ".github/server-tests/kata-$KATA_NUM"/* "temp-server-tests/kata-$KATA_NUM/"
+          # Copiar TODA la estructura del proyecto del estudiante
+          cp -r "katas/kata-$KATA_NUM" "temp-server-tests/"
           
           cd "temp-server-tests/kata-$KATA_NUM"
           
-          echo "📋 Server tests configuration:"
-          ls -la *.cs 2>/dev/null || echo "No .cs files found"
+          echo "📋 Original test files:"
+          find . -name "*Tests.cs" -o -name "*Test.cs" | head -5
           
-          # Ejecutar las pruebas del servidor
+          # REEMPLAZAR los archivos de tests del estudiante con los del servidor
+          # Esto asegura que se ejecuten las pruebas comprehensivas del servidor
+          
+          if [ "$KATA_NUM" = "1" ]; then
+            # Kata 1: Reemplazar FizzBuzzTests.cs con FizzBuzzServerTests.cs
+            if [ -f "../../.github/server-tests/kata-1/FizzBuzzServerTests.cs" ]; then
+              echo "🔄 Replacing student tests with comprehensive server tests..."
+              # Encontrar y reemplazar el archivo de tests del estudiante
+              find . -name "*Tests.cs" -not -path "*/obj/*" -not -path "*/bin/*" | while read testfile; do
+                echo "  📝 Replacing $testfile with server tests"
+                cp "../../.github/server-tests/kata-1/FizzBuzzServerTests.cs" "$testfile"
+              done
+            fi
+            
+          elif [ "$KATA_NUM" = "2" ]; then
+            # Kata 2: Reemplazar CalculatorTests.cs con CalculatorServerTests.cs
+            if [ -f "../../.github/server-tests/kata-2/CalculatorServerTests.cs" ]; then
+              echo "� Replacing student tests with comprehensive server tests..."
+              find . -name "*Tests.cs" -not -path "*/obj/*" -not -path "*/bin/*" | while read testfile; do
+                echo "  📝 Replacing $testfile with server tests"
+                cp "../../.github/server-tests/kata-2/CalculatorServerTests.cs" "$testfile"
+              done
+            fi
+          fi
+          
+          echo ""
+          echo "📋 After replacement - test files content:"
+          find . -name "*Tests.cs" -not -path "*/obj/*" -not -path "*/bin/*" | while read testfile; do
+            echo "📄 $testfile:"
+            grep -c "TestMethod" "$testfile" 2>/dev/null | xargs echo "  Test methods found:"
+          done
+          
+          echo ""
+          echo "🔨 Building with server tests..."
+          if ! dotnet build --verbosity normal; then
+            echo "❌ Build with server tests failed"
+            echo "result=failure" >> $GITHUB_OUTPUT
+            cd ../../
+            rm -rf temp-server-tests
+            exit 1
+          fi
+          
+          
+          echo ""
+          echo "🧪 Executing SERVER TESTS..."
+          # Ejecutar las pruebas del servidor (ahora son las únicas en el proyecto)
           if dotnet test --verbosity normal --logger "console;verbosity=detailed" > ../../server-test-output.txt 2>&1; then
             echo "✅ ALL SERVER TESTS PASSED! Kata $KATA_NUM completed successfully"
             echo "result=success" >> $GITHUB_OUTPUT
             
-            # Mostrar resumen
+            # Mostrar resumen completo
             echo ""
-            echo "📊 Test Results Summary:"
-            grep -E "(Passed|Failed|Skipped)" ../../server-test-output.txt || echo "Could not parse results"
+            echo "📊 Complete Test Results Summary:"
+            cat ../../server-test-output.txt | grep -E "(Passed|Failed|Skipped|Total)" || echo "Could not parse results"
+            
+            # Contar tests ejecutados
+            TOTAL_TESTS=$(cat ../../server-test-output.txt | grep -o "Passed.*" | wc -l)
+            echo ""
+            echo "🎯 Total server tests executed: $TOTAL_TESTS"
             
           else
             echo "❌ SERVER TESTS FAILED - Kata $KATA_NUM not yet complete"
             echo "result=failure" >> $GITHUB_OUTPUT
             
             echo ""
-            echo "📋 Failed server tests details:"
+            echo "📋 Detailed server test failure report:"
             cat ../../server-test-output.txt
             
             echo ""
             echo "💡 Keep implementing using TDD until all functionality is complete!"
+            echo "📝 Server tests are comprehensive and test ALL required features."
           fi
           
           # Limpiar
