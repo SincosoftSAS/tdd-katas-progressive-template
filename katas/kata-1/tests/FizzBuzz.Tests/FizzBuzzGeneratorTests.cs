@@ -1,4 +1,5 @@
 using FizzBuzz;
+using FluentAssertions;
 
 namespace FizzBuzz.Tests
 {
@@ -11,8 +12,8 @@ namespace FizzBuzz.Tests
             var result = FizzBuzzGenerator.Generate(1);
             
             // Assert
-            Assert.Single(result);
-            Assert.Equal("1", result[0]);
+            result.Should().HaveCount(1);
+            result[0].Should().Be("1");
         }
         
         [Fact]
@@ -22,8 +23,8 @@ namespace FizzBuzz.Tests
             var result = FizzBuzzGenerator.Generate(15);
             
             // Assert
-            Assert.Equal(15, result.Count);
-            Assert.Equal("FizzBuzz", result[14]);
+            result.Should().HaveCount(15);
+            result[14].Should().Be("FizzBuzz");
         }
     }
 }

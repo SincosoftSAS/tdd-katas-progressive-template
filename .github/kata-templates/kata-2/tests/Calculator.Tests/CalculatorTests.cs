@@ -1,4 +1,5 @@
 using Xunit;
+using FluentAssertions;
 
 namespace Calculator.Tests
 {
@@ -17,7 +18,7 @@ namespace Calculator.Tests
             int result = _calculator.Add(a, b);
 
             // Assert
-            Assert.Equal(8, result);
+            result.Should().Be(8);
         }
 
         [Fact]
@@ -31,7 +32,7 @@ namespace Calculator.Tests
             int result = _calculator.Subtract(a, b);
 
             // Assert
-            Assert.Equal(6, result);
+            result.Should().Be(6);
         }
 
         // TODO: Implementa más tests usando TDD
