@@ -87,7 +87,8 @@ jobs:
       - name: Unlock next kata
         if: steps.test.outputs.result == 'success'
         run: |
-          NEXT=$((steps.kata.outputs.number + 1))
+          CURRENT=${{ steps.kata.outputs.number }}
+          NEXT=$((CURRENT + 1))
           
           if [ -d ".github/kata-templates/kata-$NEXT" ] && [ ! -d "katas/kata-$NEXT" ]; then
             echo "🔓 Unlocking Kata $NEXT..."
