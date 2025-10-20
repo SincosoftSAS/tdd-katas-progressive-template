@@ -142,28 +142,28 @@ jobs:
                   echo "  ✅ Kata-$kata_num: COMPLETADA - no tocar"
                   
                 elif [ $kata_num -eq $CURRENT_KATA ]; then
-                  echo "  🎯 Kata-$kata_num: ACTIVA - actualizar template pero conservar trabajo"
+                  echo "  🎯 Kata-$kata_num: ACTIVA - REEMPLAZAR COMPLETAMENTE (conservar en commit)"
                   
-                  # Para kata activa: siempre actualizar el template
+                  # Para kata activa: SIEMPRE reemplazar completamente el template
+                  # Esto evita problemas con archivos movidos o estructuras modificadas
                   if [ ! -d "$KATA_DIR" ]; then
                     echo "    🆕 Creando kata activa"
                     cp -r "$TEMPLATE_SOURCE" "$KATA_DIR" 2>/dev/null || true
                     SYNC_CHANGES=1
                   else
-                    echo "    🔄 Actualizando template de kata activa"
-                    # Respaldar archivos del estudiante (los que no son template)
-                    find "$KATA_DIR" -name "*.cs" -not -name "*Tests.cs" -exec cp {} {}.backup \; 2>/dev/null || true
+                    echo "    🔄 REEMPLAZANDO template completo (trabajo previo queda en git history)"
                     
-                    # Actualizar template completo
-                    rm -rf "$KATA_DIR"/* 2>/dev/null || true
-                    cp -r "$TEMPLATE_SOURCE"/* "$KATA_DIR"/ 2>/dev/null || true
-                    
-                    # Restaurar trabajo del estudiante si existe
-                    if ls "$KATA_DIR"/*.backup >/dev/null 2>&1; then
-                      for backup in "$KATA_DIR"/*.backup; do
-                        [ -f "$backup" ] && mv "$backup" "${backup%.backup}" 2>/dev/null || true
-                      done
+                    # IMPORTANTE: Hacer commit del trabajo actual antes del reemplazo
+                    if ! (cd "$KATA_DIR" && git diff --quiet HEAD -- . 2>/dev/null); then
+                      echo "    💾 Guardando trabajo actual en commit temporal"
+                      git add "$KATA_DIR" 2>/dev/null || true
+                      git commit -m "💾 Auto-backup: Trabajo en kata-$kata_num antes de sync template" 2>/dev/null || true
                     fi
+                    
+                    # Reemplazar completamente - no intentar preservar estructura modificada
+                    echo "    🔄 Aplicando template actualizado"
+                    rm -rf "$KATA_DIR" 2>/dev/null || true
+                    cp -r "$TEMPLATE_SOURCE" "$KATA_DIR" 2>/dev/null || true
                     
                     SYNC_CHANGES=1
                   fi
@@ -208,12 +208,12 @@ jobs:
             
             # Commit y push
             git add .
-            git commit -m "🔧 Template Updates (Progress-Based Sync) - Actualiza kata activa, conserva completadas, actualiza sistema"
+            git commit -m "🔧 Template Updates (Progress-Based Sync) - REEMPLAZA kata activa (trabajo previo en git history), conserva completadas, actualiza sistema"
             
             if git push origin "$UPDATE_BRANCH"; then
               if gh pr create \
                 --title "🔧 Template Updates (Progress-Based)" \
-                --body "Sincronización basada en progress.json: Actualiza kata activa conservando tu trabajo, no toca katas completadas, actualiza sistema." \
+                --body "🔄 Sincronización basada en progress.json: Katas completadas no se tocan. Kata activa se REEMPLAZA completamente (tu trabajo se guarda en git history). Sistema se actualiza." \
                 --base master \
                 --head "$UPDATE_BRANCH"; then
                 echo "  ✅ PR creado con sincronización inteligente"
