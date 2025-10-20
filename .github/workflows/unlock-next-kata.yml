@@ -106,8 +106,8 @@ jobs:
           else
             git commit -m "🔄 Sync workflows and kata definitions from template" \
               -m "Automatically synced before unlocking next kata to ensure latest version."
-            git push origin main
-            echo "✅ Template sync completed and pushed to main"
+            git push origin ${{ github.ref_name }}
+            echo "✅ Template sync completed and pushed to ${{ github.ref_name }}"
           fi
           
           # Remove template remote
@@ -128,8 +128,8 @@ jobs:
           
           echo "🌿 Creating branch: $BRANCH_NAME"
           
-          git fetch origin main
-          git checkout -b $BRANCH_NAME origin/main
+          git fetch origin ${{ github.ref_name }}
+          git checkout -b $BRANCH_NAME origin/${{ github.ref_name }}
           
           git add "katas/$NEXT_KATA-$KATA_NAME/"
           
@@ -176,7 +176,7 @@ jobs:
           gh pr create \
             --title "🎯 Kata $NEXT_KATA: $KATA_NAME - UNLOCKED! 🔓" \
             --body-file pr-body.md \
-            --base main \
+            --base ${{ github.ref_name }} \
             --head $BRANCH_NAME \
             --label "kata" \
             --label "unlocked"
