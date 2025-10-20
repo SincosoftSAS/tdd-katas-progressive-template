@@ -22,9 +22,19 @@ jobs:
         run: |
           echo "🔍 Verificando permisos..."
           
-          # Verificar acceso a la organización
-          echo "📋 Repos de la organización:"
-          gh repo list ${{ github.repository_owner }} --limit 5
+          # Buscar específicamente repos katas-tdd
+          echo "📋 Repos katas-tdd encontrados:"
+          gh repo list ${{ github.repository_owner }} \
+            --json name \
+            --jq '.[] | select(.name | contains("katas-tdd")) | select(.name != "tdd-katas-progressive-template") | select(.name | endswith("-template") | not) | .name' \
+            > student_repos.txt
+          
+          TOTAL=$(cat student_repos.txt | wc -l)
+          echo "✅ Total encontrados: $TOTAL repos"
+          
+          cat student_repos.txt | head -5 | while read repo; do
+            [ -n "$repo" ] && echo "  📁 ${{ github.repository_owner }}/$repo"
+          done
           
           echo ""
           echo "🔑 Token info:"
@@ -36,21 +46,54 @@ jobs:
           
           echo ""
           echo "🏢 Permisos en organización:"
-          gh api "orgs/${{ github.repository_owner }}/members/$USER" 2>/dev/null || echo "No es miembro visible"
+          gh api "orgs/${{ github.repository_owner }}/members" --jq '.[].login' | head -3 || echo "No acceso a lista de miembros"
 
-      - name: 🎯 Test specific student repo
+      - name: 🎯 Test specific student repos
         run: |
-          # Probar con un repo específico
-          echo "🎯 Probando acceso a repo estudiante..."
+          echo "🎯 Probando acceso a repos estudiantes específicos..."
           
-          STUDENT_REPO="katas-tdd-didierymartinez"
-          
-          echo "📋 Info del repo:"
-          gh repo view "${{ github.repository_owner }}/$STUDENT_REPO" --json name,owner,permissions || echo "No acceso al repo"
+          # Probar con los primeros 3 repos encontrados
+          cat student_repos.txt | head -3 | while read repo; do
+            [ -z "$repo" ] && continue
+            
+            echo ""
+            echo "� Probando: $repo"
+            echo "================================"
+            
+            # Verificar acceso básico al repo
+            if gh repo view "${{ github.repository_owner }}/$repo" --json name,owner,visibility,permissions >/dev/null 2>&1; then
+              echo "  ✅ Acceso de lectura: OK"
+              
+              # Verificar permisos específicos
+              PERMS=$(gh repo view "${{ github.repository_owner }}/$repo" --json permissions --jq '.permissions')
+              echo "  � Permisos: $PERMS"
+              
+              # Intentar verificar si puede crear PRs
+              if echo "$PERMS" | grep -q "\"push\":true"; then
+                echo "  ✅ Permisos de push: OK"
+              else
+                echo "  ❌ Sin permisos de push"
+              fi
+              
+              if echo "$PERMS" | grep -q "\"pull\":true"; then
+                echo "  ✅ Permisos de pull: OK"
+              else
+                echo "  ❌ Sin permisos de pull"
+              fi
+              
+            else
+              echo "  ❌ Sin acceso al repo"
+            fi
+            
+            sleep 1
+          done
           
           echo ""
-          echo "🔧 Intentando crear issue de prueba..."
-          gh issue create \
-            --repo "${{ github.repository_owner }}/$STUDENT_REPO" \
-            --title "Test - Ignore" \
-            --body "Prueba de permisos - ignorar" || echo "No se pudo crear issue"
+          echo "📊 Resumen del diagnóstico completado"
+          
+          echo ""
+          echo "🔍 Análisis de token GitHub:"
+          echo "Token scope: ${{ github.token }}" | cut -c1-20
+          echo "Repo actual: ${{ github.repository }}"
+          echo "Actor: ${{ github.actor }}"
+          echo "Event: ${{ github.event_name }}"
