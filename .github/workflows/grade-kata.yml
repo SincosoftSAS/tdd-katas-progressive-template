@@ -100,33 +100,39 @@ jobs:
           echo "📋 Original test files:"
           find . -name "*Tests.cs" -o -name "*Test.cs" | head -5
           
-          # REEMPLAZAR los archivos de tests del estudiante con los del servidor
-          # Esto asegura que se ejecuten las pruebas comprehensivas del servidor
+          # AGREGAR los archivos de server tests al proyecto como archivos adicionales
+          # Esto permite ejecutar tanto los tests del estudiante como los del servidor
           
-          if [ "$KATA_NUM" = "1" ]; then
-            # Kata 1: Reemplazar FizzBuzzTests.cs con FizzBuzzServerTests.cs
-            if [ -f "../../.github/server-tests/kata-1/FizzBuzzServerTests.cs" ]; then
-              echo "🔄 Replacing student tests with comprehensive server tests..."
-              # Encontrar y reemplazar el archivo de tests del estudiante
-              find . -name "*Tests.cs" -not -path "*/obj/*" -not -path "*/bin/*" | while read testfile; do
-                echo "  📝 Replacing $testfile with server tests"
-                cp "../../.github/server-tests/kata-1/FizzBuzzServerTests.cs" "$testfile"
-              done
-            fi
+          SERVER_TEST_FILE="../../.github/server-tests/kata-$KATA_NUM/ServerTests.cs"
+          if [ -f "$SERVER_TEST_FILE" ]; then
+            echo "🔄 Adding comprehensive server tests to project..."
             
-          elif [ "$KATA_NUM" = "2" ]; then
-            # Kata 2: Reemplazar CalculatorTests.cs con CalculatorServerTests.cs
-            if [ -f "../../.github/server-tests/kata-2/CalculatorServerTests.cs" ]; then
-              echo "� Replacing student tests with comprehensive server tests..."
-              find . -name "*Tests.cs" -not -path "*/obj/*" -not -path "*/bin/*" | while read testfile; do
-                echo "  📝 Replacing $testfile with server tests"
-                cp "../../.github/server-tests/kata-2/CalculatorServerTests.cs" "$testfile"
-              done
+            # Encontrar el directorio de tests del proyecto
+            TEST_DIR=$(find . -name "*.Tests" -type d | head -1)
+            if [ -n "$TEST_DIR" ]; then
+              echo "  📁 Found test directory: $TEST_DIR"
+              # Copiar el archivo de server tests al directorio de tests
+              cp "$SERVER_TEST_FILE" "$TEST_DIR/ServerTests.cs"
+              echo "  📝 Added ServerTests.cs with comprehensive server tests"
+            else
+              echo "  ❌ Could not find test directory"
+              echo "result=failure" >> $GITHUB_OUTPUT
+              echo "error_message=Test directory not found" >> $GITHUB_OUTPUT
+              cd ../../
+              rm -rf temp-server-tests
+              exit 1
             fi
+          else
+            echo "  ❌ Server test file not found: $SERVER_TEST_FILE"
+            echo "result=failure" >> $GITHUB_OUTPUT
+            echo "error_message=Server tests not found" >> $GITHUB_OUTPUT
+            cd ../../
+            rm -rf temp-server-tests
+            exit 1
           fi
           
           echo ""
-          echo "📋 After replacement - test files content:"
+          echo "📋 After adding server tests - test files content:"
           find . -name "*Tests.cs" -not -path "*/obj/*" -not -path "*/bin/*" | while read testfile; do
             echo "📄 $testfile:"
             # Contar tanto [Fact] (xUnit) como [TestMethod] (MSTest) para compatibilidad
@@ -152,10 +158,9 @@ jobs:
             exit 1
           fi
           
-          
           echo ""
           echo "🧪 Executing SERVER TESTS..."
-          # Ejecutar las pruebas del servidor (ahora son las únicas en el proyecto)
+          # Ejecutar las pruebas del servidor (ahora incluidas como archivo adicional)
           if dotnet test --verbosity normal --logger "console;verbosity=detailed" > ../../server-test-output.txt 2>&1; then
             echo "✅ ALL SERVER TESTS PASSED! Kata $KATA_NUM completed successfully"
             echo "result=success" >> $GITHUB_OUTPUT

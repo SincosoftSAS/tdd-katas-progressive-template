@@ -6,9 +6,9 @@ namespace FizzBuzz.Tests
 {
     /// <summary>
     /// Tests completos ejecutados en el servidor para evaluación.
-    /// Los estudiantes no ven estos tests - solo los 2 ejemplos en FizzBuzzGeneratorTests.cs
+    /// Los estudiantes no ven estos tests - se agregan automáticamente durante la evaluación
     /// </summary>
-    public class FizzBuzzServerTests
+    public class ServerTests
     {
         [Fact]
         public void Generate_WithOne_ReturnsListWithOne()

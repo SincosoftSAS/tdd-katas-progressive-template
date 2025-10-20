@@ -5,9 +5,9 @@ namespace Calculator.Tests
 {
     /// <summary>
     /// Tests completos ejecutados en el servidor para evaluación.
-    /// Los estudiantes no ven estos tests - solo los 2 ejemplos en CalculatorTests.cs
+    /// Los estudiantes no ven estos tests - se agregan automáticamente durante la evaluación
     /// </summary>
-    public class CalculatorServerTests
+    public class ServerTests
     {
         private readonly Calculator _calculator = new();
 
