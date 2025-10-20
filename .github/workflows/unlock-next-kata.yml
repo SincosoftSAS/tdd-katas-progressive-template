@@ -19,6 +19,18 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
       
+      - name: Setup GitHub labels
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "🏷️  Ensuring required labels exist..."
+          
+          # Create labels if they don't exist (ignore errors if they already exist)
+          gh label create "kata" --color "0052cc" --description "TDD Kata related" 2>/dev/null || echo "Label 'kata' already exists"
+          gh label create "unlocked" --color "28a745" --description "Kata unlocked and available" 2>/dev/null || echo "Label 'unlocked' already exists"
+          
+          echo "✅ Labels ready"
+
       - name: Extract event data
         id: event
         run: |
@@ -173,6 +185,7 @@ jobs:
           echo "" >> pr-body.md
           echo "**Good luck!** 🚀" >> pr-body.md
           
+          # Create PR with labels (labels should exist now)
           gh pr create \
             --title "🎯 Kata $NEXT_KATA: $KATA_NAME - UNLOCKED! 🔓" \
             --body-file pr-body.md \

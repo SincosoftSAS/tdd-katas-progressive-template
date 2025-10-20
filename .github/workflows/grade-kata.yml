@@ -22,6 +22,24 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
       
+      - name: Setup GitHub labels
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "🏷️  Ensuring required labels exist..."
+          
+          # Create base labels if they don't exist (ignore errors if they already exist)
+          gh label create "test-failure" --color "d73a4a" --description "Tests failed in kata evaluation" 2>/dev/null || echo "Label 'test-failure' already exists"
+          gh label create "kata" --color "0052cc" --description "TDD Kata related" 2>/dev/null || echo "Label 'kata' already exists"
+          gh label create "unlocked" --color "28a745" --description "Kata unlocked and available" 2>/dev/null || echo "Label 'unlocked' already exists"
+          
+          # Create kata-specific labels for all possible katas
+          for i in {01..05}; do
+            gh label create "kata-$i" --color "1d76db" --description "Kata $i related" 2>/dev/null || echo "Label 'kata-$i' already exists"
+          done
+          
+          echo "✅ Labels ready"
+
       - name: Set initial commit status
         run: |
           curl -X POST \
@@ -467,6 +485,7 @@ jobs:
           EOF
           
           # Create the issue
+          # Create issue for test failure (labels should exist now)
           gh issue create \
             --title "❌ Tests Failed: Kata $KATA_NUMBER ($KATA_NAME)" \
             --body-file issue-body.md \
@@ -484,7 +503,7 @@ jobs:
         run: |
           echo "🔍 Checking for open test failure issues to close..."
           
-          # Find and close open test failure issues for this kata
+          # Find and close open test failure issues for this kata (labels should exist now)
           OPEN_ISSUES=$(gh issue list --label "test-failure" --label "kata-$KATA_NUMBER" --state open --json number --jq '.[].number' || echo "")
           
           if [ -n "$OPEN_ISSUES" ]; then
