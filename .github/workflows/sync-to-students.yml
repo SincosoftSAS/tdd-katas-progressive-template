@@ -72,25 +72,46 @@ jobs:
           has_student_work() {
             local kata_dir="$1"
             if [ ! -d "$kata_dir" ]; then
+              echo "    🔍 Debug: $kata_dir no existe"
               return 1  # No existe
             fi
             
+            echo "    🔍 Debug: Analizando $kata_dir"
+            
             # Buscar archivos .cs que no sean tests
             local cs_files=$(find "$kata_dir" -name "*.cs" -not -name "*Tests.cs" 2>/dev/null)
+            local file_count=0
+            
             for file in $cs_files; do
               if [ -f "$file" ]; then
-                # Si no contiene NotImplementedException, tiene trabajo
-                if ! grep -q "throw new NotImplementedException" "$file" 2>/dev/null; then
+                file_count=$((file_count + 1))
+                echo "    🔍 Debug: Revisando archivo $(basename "$file")"
+                
+                # Verificar contenido del archivo
+                local content=$(cat "$file" 2>/dev/null || echo "")
+                local lines=$(echo "$content" | wc -l)
+                echo "    🔍 Debug: Líneas: $lines"
+                
+                # Si no contiene NotImplementedException, definitivamente tiene trabajo
+                if ! echo "$content" | grep -q "throw new NotImplementedException" 2>/dev/null; then
+                  echo "    🔍 Debug: No tiene NotImplementedException - TIENE TRABAJO"
                   return 0  # Tiene trabajo
                 fi
-                # Si tiene muchas líneas, probablemente tiene trabajo
-                local lines=$(wc -l < "$file" 2>/dev/null || echo "0")
-                if [ "$lines" -gt 25 ]; then
+                
+                # Verificar si solo tiene el código template básico
+                # Contar líneas que no sean espacios, comentarios o NotImplementedException
+                local meaningful_lines=$(echo "$content" | grep -v "^\s*$" | grep -v "^\s*//" | grep -v "throw new NotImplementedException" | grep -v "^\s*{" | grep -v "^\s*}" | wc -l)
+                echo "    🔍 Debug: Líneas significativas: $meaningful_lines"
+                
+                # Si tiene más de 5 líneas significativas además del template, probablemente tiene trabajo
+                if [ "$meaningful_lines" -gt 5 ]; then
+                  echo "    🔍 Debug: Muchas líneas significativas - POSIBLE TRABAJO"
                   return 0  # Probablemente tiene trabajo
                 fi
               fi
             done
             
+            echo "    🔍 Debug: $file_count archivos analizados - SIN TRABAJO DETECTADO"
             return 1  # Sin trabajo significativo
           }
           
