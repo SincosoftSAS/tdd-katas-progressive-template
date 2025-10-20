@@ -1,4 +1,4 @@
-using Xunit;
+using Calculator;
 
 namespace Calculator.Tests
 {
@@ -17,11 +17,14 @@ namespace Calculator.Tests
             Assert.Equal(5, result);
         }
         
-        // TODO: Añade más tests siguiendo TDD
-        // - Subtract tests
-        // - Multiply tests  
-        // - Divide tests
-        // - División por cero
-        // - Números negativos
+        [Fact]
+        public void Divide_ByZero_ThrowsException()
+        {
+            // Arrange
+            var calculator = new Calculator();
+            
+            // Act & Assert
+            Assert.Throws<DivideByZeroException>(() => calculator.Divide(5, 0));
+        }
     }
 }

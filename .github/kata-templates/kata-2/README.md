@@ -24,17 +24,21 @@ calc.Divide(8, 2)   // → 4
 calc.Divide(5, 0)   // → Lanza excepción
 ```
 
-## 🔍 Casos de Prueba
+## 🔍 Casos de Prueba (Ejemplos)
 
-- Operaciones básicas con números positivos
+Los tests incluidos son solo **ejemplos** para guiarte:
+- ✅ Suma básica: `Add(2, 3)` → `5`
+- ✅ División por cero: debe lanzar `DivideByZeroException`
+
+**Nota**: El servidor ejecutará tests adicionales ocultos que evaluarán:
 - Operaciones con números negativos
-- División por cero debe lanzar `DivideByZeroException`
-- Casos límite (0, números grandes)
+- Resta, multiplicación completas
+- Casos límite y validaciones extras
 
 ## 💻 Archivos de Trabajo
 
-- **Tu código**: `src/Calculator.cs`
-- **Tests**: `tests/CalculatorTests.cs`
+- **Tu código**: `src/Calculator.cs` ← Implementa aquí
+- **Tests ejemplo**: `tests/CalculatorTests.cs` ← Solo 2 ejemplos
 
 ## 🔄 Ciclo TDD
 

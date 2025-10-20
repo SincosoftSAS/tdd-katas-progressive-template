@@ -1,0 +1,12 @@
+# Archivos Solo para Instructores
+
+# Scripts administrativos
+sync-students.sh
+GUIA-SINCRONIZACION.md
+DEBUG-WORKFLOW.md
+SISTEMA-DESBLOQUEO.md
+
+# Documentación técnica interna
+*.backup
+*.bak
+.admin/
