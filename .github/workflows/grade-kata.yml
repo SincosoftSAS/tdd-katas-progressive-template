@@ -207,17 +207,37 @@ jobs:
             LEVEL="Experto 🏅"
           fi
           
-          # Update estado actual
-          sed -i "s/\*\*Kata Actual:\*\* Kata [0-9]\\+ - [A-Za-z]\\+.**/**Kata Actual:** Kata $KATA_NUMBER - $KATA_NAME (✅ Completada)/" PROGRESS.md
+          # Update PROGRESS.md using safer approach with awk
+          # Backup original
+          cp PROGRESS.md PROGRESS.md.bak
           
-          # Update completed count
-          sed -i "s/\*\*Katas Completadas:\*\* [0-9]\\+ \\/ 5/**Katas Completadas:** $COMPLETED_COUNT \/ 5/" PROGRESS.md
+          # Update each field using awk (safer than sed with special characters)
+          awk -v kata="$KATA_NUMBER" -v name="$KATA_NAME" '
+          /\*\*Kata Actual:\*\*/ { 
+            gsub(/\*\*Kata Actual:\*\* Kata [0-9]+ - [^(]+.*/, "**Kata Actual:** Kata " kata " - " name " (✅ Completada)")
+          }
+          { print }' PROGRESS.md.bak > PROGRESS.md.tmp && mv PROGRESS.md.tmp PROGRESS.md
           
-          # Update level
-          sed -i "s/\*\*Nivel:\*\* [^$]*/**Nivel:** $LEVEL/" PROGRESS.md
+          awk -v count="$COMPLETED_COUNT" '
+          /\*\*Katas Completadas:\*\*/ { 
+            gsub(/\*\*Katas Completadas:\*\* [0-9]+ \/ 5/, "**Katas Completadas:** " count " / 5")
+          }
+          { print }' PROGRESS.md > PROGRESS.md.tmp && mv PROGRESS.md.tmp PROGRESS.md
           
-          # Update timestamp
-          sed -i "s/<sub>Última actualización:.*<\\/sub>/<sub>Última actualización: $LAST_DATE | Kata actual: $KATA_NUMBER | Completada ✅<\\/sub>/" PROGRESS.md
+          awk -v level="$LEVEL" '
+          /\*\*Nivel:\*\*/ { 
+            gsub(/\*\*Nivel:\*\* [^*]+/, "**Nivel:** " level)
+          }
+          { print }' PROGRESS.md > PROGRESS.md.tmp && mv PROGRESS.md.tmp PROGRESS.md
+          
+          awk -v date="$LAST_DATE" -v kata="$KATA_NUMBER" '
+          /<sub>Última actualización:/ { 
+            gsub(/<sub>Última actualización:.*<\/sub>/, "<sub>Última actualización: " date " | Kata actual: " kata " | Completada ✅</sub>")
+          }
+          { print }' PROGRESS.md > PROGRESS.md.tmp && mv PROGRESS.md.tmp PROGRESS.md
+          
+          # Clean up
+          rm -f PROGRESS.md.bak PROGRESS.md.tmp
           
           git add PROGRESS.md
           git commit -m "Update progress: Kata $KATA_NUMBER completed" -m "[skip ci]" || true
@@ -233,8 +253,12 @@ jobs:
         run: |
           echo "📝 Updating PROGRESS.md with failure status..."
           
-          # Update estado actual with failure indicator
-          sed -i "s/\*\*Kata Actual:\*\* Kata [0-9]\\+ - [A-Za-z]\\+.**/**Kata Actual:** Kata $KATA_NUMBER - $KATA_NAME (⚠️ Tests Failing)/" PROGRESS.md
+          # Update estado actual with failure indicator using awk
+          awk -v kata="$KATA_NUMBER" -v name="$KATA_NAME" '
+          /\*\*Kata Actual:\*\*/ { 
+            gsub(/\*\*Kata Actual:\*\* Kata [0-9]+ - [^(]+.*/, "**Kata Actual:** Kata " kata " - " name " (⚠️ Tests Failing)")
+          }
+          { print }' PROGRESS.md > PROGRESS.md.tmp && mv PROGRESS.md.tmp PROGRESS.md
           
           # Add failure message to PROGRESS.md temporarily
           FAILURE_NOTE="
@@ -261,9 +285,13 @@ jobs:
             echo "$FAILURE_NOTE" >> PROGRESS.md
           fi
           
-          # Update timestamp
+          # Update timestamp using awk
           CURRENT_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-          sed -i "s/<sub>Última actualización:.*<\\/sub>/<sub>Última actualización: $CURRENT_DATE | Kata actual: $KATA_NUMBER | Tests failing ⚠️<\\/sub>/" PROGRESS.md
+          awk -v date="$CURRENT_DATE" -v kata="$KATA_NUMBER" '
+          /<sub>Última actualización:/ { 
+            gsub(/<sub>Última actualización:.*<\/sub>/, "<sub>Última actualización: " date " | Kata actual: " kata " | Tests failing ⚠️</sub>")
+          }
+          { print }' PROGRESS.md > PROGRESS.md.tmp && mv PROGRESS.md.tmp PROGRESS.md
           
           git add PROGRESS.md
           git commit -m "Update: Tests failing for Kata $KATA_NUMBER" -m "[skip ci]" || true
