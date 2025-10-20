@@ -70,6 +70,18 @@ jobs:
           echo ""
           echo "💡 Para ejecutar: vuelve a correr con dry_run=false"
 
+      - name: 🔧 Create update branch
+        if: inputs.dry_run == false
+        run: |
+          # Crear una branch específica para las actualizaciones
+          UPDATE_BRANCH="template-updates-$(date +%Y%m%d-%H%M%S)"
+          echo "🔧 Creando branch: $UPDATE_BRANCH"
+          
+          git checkout -b "$UPDATE_BRANCH"
+          git push origin "$UPDATE_BRANCH"
+          
+          echo "update_branch=$UPDATE_BRANCH" >> $GITHUB_ENV
+
       - name: 🔧 Prepare PR content
         if: inputs.dry_run == false
         run: |
@@ -119,7 +131,7 @@ jobs:
             echo "  📋 Branch por defecto: $DEFAULT_BRANCH"
             
             # Verificar si ya existe un PR
-            EXISTING_PR=$(gh pr list --repo "${{ github.repository_owner }}/$repo" --head "${{ github.repository_owner }}:master" --json number --jq '.[0].number // empty' 2>/dev/null || echo "")
+            EXISTING_PR=$(gh pr list --repo "${{ github.repository_owner }}/$repo" --head "${{ github.repository_owner }}:${{ env.update_branch }}" --json number --jq '.[0].number // empty' 2>/dev/null || echo "")
             
             if [ -n "$EXISTING_PR" ]; then
               echo "  ⚠️  PR #$EXISTING_PR ya existe"
@@ -135,7 +147,7 @@ jobs:
               --repo "${{ github.repository_owner }}/$repo" \
               --title "🔧 Template Updates - Sistema Mejorado" \
               --body-file pr_body.txt \
-              --head "${{ github.repository_owner }}:master" \
+              --head "${{ github.repository_owner }}:${{ env.update_branch }}" \
               --base "$DEFAULT_BRANCH" 2>&1); then
               echo "  ✅ PR creado exitosamente (base: $DEFAULT_BRANCH)"
               echo "  📋 $OUTPUT"
