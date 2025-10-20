@@ -53,10 +53,10 @@ jobs:
           echo ""
           echo "📊 Total: ${{ steps.find.outputs.total }} repositorios"
 
-      - name: 📤 Sync repos
+      - name: 📤 Smart Sync
         if: inputs.dry_run == false
         run: |
-          echo "📤 Sincronizando repositorios..."
+          echo "📤 Sincronización inteligente iniciada..."
           
           # Configurar git
           git config --global user.name "GitHub Actions"
@@ -67,6 +67,32 @@ jobs:
           
           SUCCESS=0
           FAILED=0
+          
+          # Función para verificar si una kata tiene trabajo del estudiante
+          has_student_work() {
+            local kata_dir="$1"
+            if [ ! -d "$kata_dir" ]; then
+              return 1  # No existe
+            fi
+            
+            # Buscar archivos .cs que no sean tests
+            local cs_files=$(find "$kata_dir" -name "*.cs" -not -name "*Tests.cs" 2>/dev/null)
+            for file in $cs_files; do
+              if [ -f "$file" ]; then
+                # Si no contiene NotImplementedException, tiene trabajo
+                if ! grep -q "throw new NotImplementedException" "$file" 2>/dev/null; then
+                  return 0  # Tiene trabajo
+                fi
+                # Si tiene muchas líneas, probablemente tiene trabajo
+                local lines=$(wc -l < "$file" 2>/dev/null || echo "0")
+                if [ "$lines" -gt 25 ]; then
+                  return 0  # Probablemente tiene trabajo
+                fi
+              fi
+            done
+            
+            return 1  # Sin trabajo significativo
+          }
           
           while read repo; do
             [ -z "$repo" ] && continue
@@ -83,59 +109,79 @@ jobs:
             fi
             
             cd temp_repo
-            
-            # Crear branch y aplicar cambios
             git checkout -b "$UPDATE_BRANCH"
             
-            # Copiar archivos del template
-            echo "  📋 Aplicando actualizaciones del template..."
+            # Analizar qué katas están desbloqueadas
+            UNLOCKED_KATAS=""
+            for kata_num in 1 2 3 4 5; do
+              if [ -d "katas/kata-$kata_num" ]; then
+                UNLOCKED_KATAS="$UNLOCKED_KATAS kata-$kata_num"
+              fi
+            done
+            echo "  📋 Katas desbloqueadas:$UNLOCKED_KATAS"
             
-            # Copiar kata-1 limpio
-            if [ -d "../katas/kata-1" ]; then
-              echo "    � Actualizando kata-1..."
-              rm -rf katas/kata-1/* 2>/dev/null || true
-              cp -r ../katas/kata-1/* katas/kata-1/ 2>/dev/null || true
+            # Aplicar actualizaciones inteligentes
+            SYNC_CHANGES=0
+            
+            # Kata-1: Actualizar si no tiene trabajo del estudiante
+            if echo "$UNLOCKED_KATAS" | grep -q "kata-1" && [ -d "../katas/kata-1" ]; then
+              if has_student_work "katas/kata-1"; then
+                echo "  ⚠️  Kata-1: Conservando trabajo del estudiante"
+              else
+                echo "  🔄 Kata-1: Actualizando (sin trabajo previo)"
+                rm -rf katas/kata-1/* 2>/dev/null || true
+                cp -r ../katas/kata-1/* katas/kata-1/ 2>/dev/null || true
+                SYNC_CHANGES=1
+              fi
             fi
             
-            # Copiar kata-2 completo
-            if [ -d "../.github/kata-templates/kata-2" ] && [ -d "katas" ]; then
-              echo "    🔄 Actualizando kata-2..."
-              rm -rf katas/kata-2 2>/dev/null || true
-              cp -r ../.github/kata-templates/kata-2 katas/kata-2 2>/dev/null || true
+            # Kata-2: Crear si está desbloqueada pero no tiene trabajo
+            if echo "$UNLOCKED_KATAS" | grep -q "kata-2" && [ -d "../.github/kata-templates/kata-2" ]; then
+              if [ ! -d "katas/kata-2" ]; then
+                echo "  🆕 Kata-2: Creando nueva kata"
+                cp -r ../.github/kata-templates/kata-2 katas/kata-2 2>/dev/null || true
+                SYNC_CHANGES=1
+              elif has_student_work "katas/kata-2"; then
+                echo "  ⚠️  Kata-2: Conservando trabajo del estudiante"
+              else
+                echo "  🔄 Kata-2: Actualizando (sin trabajo previo)"
+                rm -rf katas/kata-2/* 2>/dev/null || true
+                cp -r ../.github/kata-templates/kata-2/* katas/kata-2/ 2>/dev/null || true
+                SYNC_CHANGES=1
+              fi
             fi
             
-            # Copiar workflows actualizados
+            # Sistema: Siempre actualizar (workflows, server tests)
+            echo "  🔧 Actualizando sistema..."
             if [ -f "../.github/workflows/grade-kata.yml" ]; then
-              echo "    🔄 Actualizando workflow de evaluación..."
               cp ../.github/workflows/grade-kata.yml .github/workflows/ 2>/dev/null || true
+              SYNC_CHANGES=1
             fi
             
-            # Copiar server tests
             if [ -d "../.github/server-tests" ]; then
-              echo "    🔄 Actualizando tests del servidor..."
               rm -rf .github/server-tests 2>/dev/null || true
               cp -r ../.github/server-tests .github/ 2>/dev/null || true
+              SYNC_CHANGES=1
             fi
             
-            # Verificar cambios
-            if git diff --quiet && git diff --cached --quiet; then
-              echo "  ℹ️  Sin cambios"
+            # Verificar si hay cambios reales
+            if [ "$SYNC_CHANGES" -eq 0 ] || (git diff --quiet && git diff --cached --quiet); then
+              echo "  ℹ️  Sin cambios necesarios"
               cd ..
               continue
             fi
             
             # Commit y push
             git add .
-            git commit -m "🔧 Template Updates - Sistema Mejorado - Mejoras: Kata-1 limpio, Kata-2 completo, tests optimizados, workflow corregido"
+            git commit -m "🔧 Template Updates (Smart Sync) - Respeta trabajo existente, actualiza sistema"
             
             if git push origin "$UPDATE_BRANCH"; then
-              # Crear PR
               if gh pr create \
-                --title "🔧 Template Updates - Sistema Mejorado" \
-                --body "Actualizaciones del template: Kata-1 limpio, Kata-2 completo, tests optimizados, workflow corregido. Tu progreso se mantiene intacto. Acepta este PR para recibir las mejoras." \
+                --title "🔧 Template Updates (Smart Sync)" \
+                --body "Sincronización inteligente: Actualiza sistema y workflows respetando tu trabajo existente. Solo modifica katas sin código previo. Tu progreso se mantiene intacto." \
                 --base master \
                 --head "$UPDATE_BRANCH"; then
-                echo "  ✅ PR creado"
+                echo "  ✅ PR creado con sincronización inteligente"
                 SUCCESS=$((SUCCESS + 1))
               else
                 echo "  ❌ Error creando PR"
@@ -154,4 +200,4 @@ jobs:
 
       - name: 🎉 Done
         run: |
-          echo "🎉 Proceso completado"
+          echo "🎉 Sincronización inteligente completada"
