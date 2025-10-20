@@ -1,4 +1,4 @@
-name: 🔄 Sync to Students (Clone Method)
+name: 🔄 Sync Template to Students
 
 on:
   workflow_dispatch:
@@ -88,10 +88,33 @@ jobs:
             git checkout -b "$UPDATE_BRANCH"
             
             # Copiar archivos del template
+            echo "  📋 Aplicando actualizaciones del template..."
+            
+            # Copiar kata-1 limpio
             if [ -d "../katas/kata-1" ]; then
-              echo "  📋 Copiando kata-1..."
+              echo "    � Actualizando kata-1..."
               rm -rf katas/kata-1/* 2>/dev/null || true
               cp -r ../katas/kata-1/* katas/kata-1/ 2>/dev/null || true
+            fi
+            
+            # Copiar kata-2 completo
+            if [ -d "../.github/kata-templates/kata-2" ] && [ -d "katas" ]; then
+              echo "    🔄 Actualizando kata-2..."
+              rm -rf katas/kata-2 2>/dev/null || true
+              cp -r ../.github/kata-templates/kata-2 katas/kata-2 2>/dev/null || true
+            fi
+            
+            # Copiar workflows actualizados
+            if [ -f "../.github/workflows/grade-kata.yml" ]; then
+              echo "    🔄 Actualizando workflow de evaluación..."
+              cp ../.github/workflows/grade-kata.yml .github/workflows/ 2>/dev/null || true
+            fi
+            
+            # Copiar server tests
+            if [ -d "../.github/server-tests" ]; then
+              echo "    🔄 Actualizando tests del servidor..."
+              rm -rf .github/server-tests 2>/dev/null || true
+              cp -r ../.github/server-tests .github/ 2>/dev/null || true
             fi
             
             # Verificar cambios
@@ -103,13 +126,13 @@ jobs:
             
             # Commit y push
             git add .
-            git commit -m "Template updates - Sistema mejorado"
+            git commit -m "🔧 Template Updates - Sistema Mejorado - Mejoras: Kata-1 limpio, Kata-2 completo, tests optimizados, workflow corregido"
             
             if git push origin "$UPDATE_BRANCH"; then
               # Crear PR
               if gh pr create \
-                --title "🔧 Template Updates" \
-                --body "Actualizaciones del template con mejoras" \
+                --title "🔧 Template Updates - Sistema Mejorado" \
+                --body "Actualizaciones del template: Kata-1 limpio, Kata-2 completo, tests optimizados, workflow corregido. Tu progreso se mantiene intacto. Acepta este PR para recibir las mejoras." \
                 --base master \
                 --head "$UPDATE_BRANCH"; then
                 echo "  ✅ PR creado"
