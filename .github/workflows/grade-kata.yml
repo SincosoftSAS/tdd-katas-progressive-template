@@ -57,6 +57,7 @@ jobs:
           if [ ! -d "katas/kata-$KATA_NUM" ]; then
             echo "❌ Kata $KATA_NUM directory not found"
             echo "result=failure" >> $GITHUB_OUTPUT
+            echo "error_message=Kata directory not found" >> $GITHUB_OUTPUT
             exit 1
           fi
           
@@ -64,15 +65,20 @@ jobs:
           if [ ! -d ".github/server-tests/kata-$KATA_NUM" ]; then
             echo "❌ Server tests for kata-$KATA_NUM not found"
             echo "result=failure" >> $GITHUB_OUTPUT
+            echo "error_message=Server tests not found" >> $GITHUB_OUTPUT
             exit 1
           fi
           
           cd "katas/kata-$KATA_NUM"
           
           echo "🔨 Building student solution..."
-          if ! dotnet build --verbosity quiet; then
+          if ! dotnet build --verbosity quiet > ../../build-output.txt 2>&1; then
             echo "❌ Build failed"
             echo "result=failure" >> $GITHUB_OUTPUT
+            echo "error_message=Build failed" >> $GITHUB_OUTPUT
+            echo ""
+            echo "📋 Build Error Details:"
+            cat ../../build-output.txt
             exit 1
           fi
           
@@ -134,9 +140,13 @@ jobs:
           
           echo ""
           echo "🔨 Building with server tests..."
-          if ! dotnet build --verbosity normal; then
+          if ! dotnet build --verbosity normal > ../../server-build-output.txt 2>&1; then
             echo "❌ Build with server tests failed"
             echo "result=failure" >> $GITHUB_OUTPUT
+            echo "error_message=Server build failed" >> $GITHUB_OUTPUT
+            echo ""
+            echo "📋 Server Build Error Details:"
+            cat ../../server-build-output.txt
             cd ../../
             rm -rf temp-server-tests
             exit 1
@@ -163,6 +173,10 @@ jobs:
           else
             echo "❌ SERVER TESTS FAILED - Kata $KATA_NUM not yet complete"
             echo "result=failure" >> $GITHUB_OUTPUT
+            echo "error_message=Server tests failed" >> $GITHUB_OUTPUT
+            
+            # Extraer información específica de pruebas fallidas
+            FAILED_TESTS=$(cat ../../server-test-output.txt | grep -A 5 -B 2 "FAIL\|Failed:" || echo "Could not extract failed test details")
             
             echo ""
             echo "📋 Detailed server test failure report:"
@@ -171,6 +185,9 @@ jobs:
             echo ""
             echo "💡 Keep implementing using TDD until all functionality is complete!"
             echo "📝 Server tests are comprehensive and test ALL required features."
+            
+            # Guardar información de pruebas fallidas para usar en el issue
+            echo "$FAILED_TESTS" > ../../failed-tests-details.txt
           fi
           
           # Limpiar
@@ -246,9 +263,38 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           KATA_NUM=${{ steps.kata.outputs.number }}
+          ERROR_MSG="${{ steps.test.outputs.error_message }}"
           
-          # Create issue with detailed guidance
-          gh issue create \
-            --title "❌ Kata $KATA_NUM: Server Tests Failed" \
-            --body "🧪 Server tests failed - Your kata is not yet complete. Your code compiles but doesn't pass the comprehensive server tests. Continue implementing ALL required functionality using TDD. Run 'dotnet test' in katas/kata-$KATA_NUM and push again when complete!" \
-            --assignee "${{ github.actor }}"
+          # Crear issue específico basado en el tipo de error
+          if [[ "$ERROR_MSG" == *"Build failed"* ]]; then
+            gh issue create \
+              --title "🔨 Kata $KATA_NUM: Build Error" \
+              --body "❌ **Build Failed** - Your code doesn't compile. Run \`dotnet build\` in \`katas/kata-$KATA_NUM\` to see the build errors. Check the [workflow logs](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) for detailed error information." \
+              --assignee "${{ github.actor }}" \
+              --label "kata-$KATA_NUM,build-error"
+              
+          elif [[ "$ERROR_MSG" == *"Server build failed"* ]]; then
+            gh issue create \
+              --title "🔧 Kata $KATA_NUM: Server Integration Error" \
+              --body "⚠️ **Server Integration Error** - Your code compiles but there's an issue with the server test integration. Check that your namespaces and class names match the expected format. Review the [workflow logs](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) for details." \
+              --assignee "${{ github.actor }}" \
+              --label "kata-$KATA_NUM,integration-error"
+              
+          else
+            # Server tests failed - crear issue con detalles
+            echo "Creating detailed test failure issue..."
+            
+            # Extraer información de pruebas fallidas
+            FAILED_INFO=""
+            if [ -f "failed-tests-details.txt" ]; then
+              FAILED_INFO="$(cat failed-tests-details.txt | head -5)"
+            else
+              FAILED_INFO="Check workflow logs for detailed failure information"
+            fi
+            
+            gh issue create \
+              --title "🧪 Kata $KATA_NUM: Tests Failed" \
+              --body "❌ **Server Tests Failed** - Your kata is not yet complete. Status: Code compiles successfully but some functionality is missing. Run \`dotnet test\` in \`katas/kata-$KATA_NUM\` to see which tests are failing. Failed tests: $FAILED_INFO. Check the [complete workflow logs](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) for detailed test output." \
+              --assignee "${{ github.actor }}" \
+              --label "kata-$KATA_NUM,failed-tests"
+          fi
