@@ -32,12 +32,12 @@ jobs:
         run: |
           echo "🔍 Buscando repositorios con prefijo '${{ inputs.assignment_prefix }}'..."
           
-          # Buscar repos en la organización
+          # Buscar repos en la organización (excluyendo el template)
           REPOS=$(curl -s \
             -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
             -H "Accept: application/vnd.github.v3+json" \
             "https://api.github.com/orgs/${{ github.repository_owner }}/repos?per_page=100" \
-            | jq -r '.[] | select(.name | startswith("${{ inputs.assignment_prefix }}")) | .name')
+            | jq -r '.[] | select(.name | startswith("${{ inputs.assignment_prefix }}")) | select(.name != "${{ github.event.repository.name }}") | .name')
           
           if [ -z "$REPOS" ]; then
             echo "❌ No se encontraron repositorios"
@@ -87,7 +87,7 @@ jobs:
             echo "🔄 Procesando: $repo"
             
             # Crear PR usando la rama actual
-            RESULT=$(curl -s -w "%{http_code}" \
+            RESPONSE=$(curl -s \
               -X POST \
               -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
               -H "Accept: application/vnd.github.v3+json" \
@@ -99,15 +99,28 @@ jobs:
                 \"base\": \"main\"
               }")
             
-            HTTP_CODE="\${RESULT: -3}"
+            # Obtener código HTTP de la respuesta
+            HTTP_CODE=$(curl -s -o /tmp/response.json -w "%{http_code}" \
+              -X POST \
+              -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+              -H "Accept: application/vnd.github.v3+json" \
+              "https://api.github.com/repos/${{ github.repository_owner }}/$repo/pulls" \
+              -d "{
+                \"title\": \"🔧 Template Updates - Sistema Mejorado\",
+                \"body\": \"## 🔧 Actualizaciones del Template\n\n### ✅ Mejoras Incluidas:\n- **Kata-1 limpio**: Sin archivos innecesarios\n- **Kata-2 corregido**: Estructura .NET completa\n- **Tests optimizados**: Solo 2 ejemplos por kata\n- **Workflow mejorado**: Desbloqueo automático corregido\n\n### 🎯 Beneficios:\n- Mejor experiencia TDD\n- Sistema más confiable\n- Menos confusión\n\n### 📋 Acción:\n**Acepta este PR** para recibir las mejoras.\n\n*Tu progreso actual se mantiene intacto.*\",
+                \"head\": \"${{ github.repository_owner }}:$CURRENT_BRANCH\",
+                \"base\": \"main\"
+              }")
             
             if [ "$HTTP_CODE" = "201" ]; then
-              echo "  ✅ PR creado exitosamente"
+              PR_URL=$(cat /tmp/response.json | jq -r '.html_url // "N/A"')
+              echo "  ✅ PR creado: $PR_URL"
               CREATED=$((CREATED + 1))
             elif [ "$HTTP_CODE" = "422" ]; then
               echo "  ⚠️  PR ya existe o sin cambios"
             else
-              echo "  ❌ Error: HTTP $HTTP_CODE"
+              ERROR_MSG=$(cat /tmp/response.json | jq -r '.message // "Error desconocido"')
+              echo "  ❌ Error HTTP $HTTP_CODE: $ERROR_MSG"
               FAILED=$((FAILED + 1))
             fi
             
