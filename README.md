@@ -1,90 +1,90 @@
-# 🎯 TDD Journey - Progressive Katas
+# 🎯 Viaje TDD - Katas Progresivos
 
-Welcome to your personal TDD learning journey! Master Test-Driven Development by completing katas one at a time.
+¡Bienvenido a tu viaje personal de aprendizaje TDD! Domina el Desarrollo Dirigido por Pruebas completando katas uno a la vez.
 
-## 📁 Simple Structure
+## 📁 Estructura Simple
 
 ```
 katas/
-├── kata-1/          # 🔓 UNLOCKED - Start here!
-│   ├── README.md    # Instructions  
-│   ├── src/         # Your code
-│   └── tests/       # Tests
-├── kata-2/          # 🔒 Unlocks when kata-1 is complete
-├── kata-3/          # 🔒 And so on...
+├── kata-1/          # 🔓 DESBLOQUEADO - ¡Empieza aquí!
+│   ├── README.md    # Instrucciones  
+│   ├── src/         # Tu código
+│   └── tests/       # Pruebas
+├── kata-2/          # 🔒 Se desbloquea cuando kata-1 esté completo
+├── kata-3/          # 🔒 Y así sucesivamente...
 └── ...
 ```
 
-## 🚀 Getting Started
+## 🚀 Empezando
 
 ```bash
-# Work on current kata
+# Trabaja en el kata actual
 cd katas/kata-1
 
-# Run tests (should fail initially - that's TDD!)
+# Ejecuta las pruebas (¡deben fallar inicialmente - ¡eso es TDD!)
 dotnet test
 
-# Write code in src/ to make tests pass
-# Follow: Red → Green → Refactor
+# Escribe código en src/ para hacer que las pruebas pasen
+# Sigue: Rojo → Verde → Refactor
 
-# When all tests pass, kata-2 unlocks automatically!
+# ¡Cuando todas las pruebas pasen, kata-2 se desbloquea automáticamente!
 ```
 
-## 💻 Working on a Kata
+## 💻 Trabajando en un Kata
 
-### TDD Workflow (Red → Green → Refactor)
+### Flujo de Trabajo TDD (Rojo → Verde → Refactor)
 
-1. **Read**: Check the kata's `README.md` for instructions
-2. **Red**: Run `dotnet test` - tests should fail ❌
-3. **Green**: Write minimal code to make tests pass ✅
-4. **Refactor**: Improve code while keeping tests green 🔄
-5. **Repeat**: Until all requirements are met
+1. **Leer**: Revisa el `README.md` del kata para instrucciones
+2. **Rojo**: Ejecuta `dotnet test` - las pruebas deben fallar ❌
+3. **Verde**: Escribe código mínimo para hacer que las pruebas pasen ✅
+4. **Refactor**: Mejora el código manteniendo las pruebas en verde 🔄
+5. **Repetir**: Hasta que todos los requisitos se cumplan
 
-### Automatic Features
+### Características Automáticas
 
-- ✅ **Commit Status**: See results directly on GitHub
-- 📋 **Auto Issues**: Get help when tests fail  
-- 🔓 **Auto Unlock**: Next kata appears when current is complete
-- 📊 **Progress Tracking**: `.github/progress.json` keeps score
+- ✅ **Estado de Commit**: Ve los resultados directamente en GitHub
+- 📋 **Issues Automáticos**: Obtén ayuda cuando las pruebas fallen  
+- 🔓 **Desbloqueo Automático**: El siguiente kata aparece cuando el actual se completa
+- 📊 **Seguimiento de Progreso**: `.github/progress.json` mantiene el puntaje
 
-## 🔄 Simple Workflow
+## 🔄 Flujo de Trabajo Simple
 
 ```bash
-# 1. Work on current kata
+# 1. Trabaja en el kata actual
 cd katas/kata-1
 
-# 2. Follow TDD cycle
-dotnet test          # See failing tests
-# Write code in src/
-dotnet test          # See tests pass
+# 2. Sigue el ciclo TDD
+dotnet test          # Ve las pruebas que fallan
+# Escribe código en src/
+dotnet test          # Ve las pruebas pasar
 
-# 3. Push when ready
+# 3. Sube cuando esté listo
 git add .
-git commit -m "Complete kata-1"
+git commit -m "Completa kata-1"
 git push origin master
 
-# 4. Next kata unlocks automatically! 🎉
+# 4. ¡El siguiente kata se desbloquea automáticamente! 🎉
 ```
 
-## 📊 Your Progress
+## 📊 Tu Progreso
 
-- **Current kata**: Check `.github/progress.json`
-- **Completed katas**: Shown in same file
-- **Visual feedback**: Commit status on GitHub
-- **Help**: Auto-created issues when tests fail
+- **Kata actual**: Revisa `.github/progress.json`
+- **Katas completados**: Mostrados en el mismo archivo
+- **Retroalimentación visual**: Estado de commit en GitHub
+- **Ayuda**: Issues creados automáticamente cuando las pruebas fallan
 
-## 🎓 Learning Objectives
+## 🎓 Objetivos de Aprendizaje
 
-- Master Test-Driven Development (TDD)
-- Learn the Red-Green-Refactor cycle
-- Experience incremental development
-- Build confidence with automated testing
+- Dominar el Desarrollo Dirigido por Pruebas (TDD)
+- Aprender el ciclo Rojo-Verde-Refactor
+- Experimentar desarrollo incremental
+- Construir confianza con pruebas automatizadas
 
-## 📚 Optional Enhancements
+## 📚 Mejoras Opcionales
 
-- **Pre-commit hooks**: Install with `./install-hooks.sh` for local feedback
-- **Detailed feedback**: See `FEEDBACK-SISTEMA.md` for all feedback channels
+- **Hooks pre-commit**: Instala con `./install-hooks.sh` para retroalimentación local
+- **Retroalimentación detallada**: Ve `FEEDBACK-SISTEMA.md` para todos los canales de retroalimentación
 
 ---
 
-Happy coding! 🚀💪
+¡Feliz programación! 🚀💪
