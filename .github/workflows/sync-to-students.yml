@@ -92,11 +92,18 @@ jobs:
             
             # Leer progreso del estudiante desde progress.json
             if [ -f ".github/progress.json" ]; then
-              CURRENT_KATA=$(cat .github/progress.json | jq -r '.current_kata // 1')
-              COMPLETED_KATAS=$(cat .github/progress.json | jq -r '.completed_katas[]' 2>/dev/null | tr '\n' ' ' || echo "")
+              CURRENT_KATA=$(cat .github/progress.json | jq -r '.current_kata // 1' 2>/dev/null || echo "1")
+              
+              # Obtener katas completadas de forma más simple
+              if cat .github/progress.json | jq -e '.completed_katas' >/dev/null 2>&1; then
+                COMPLETED_KATAS=$(cat .github/progress.json | jq -r '.completed_katas | join(" ")' 2>/dev/null || echo "")
+              else
+                COMPLETED_KATAS=""
+              fi
+              
               echo "  📋 Progreso del estudiante:"
               echo "    🎯 Kata actual: $CURRENT_KATA"
-              echo "    ✅ Katas completadas: $COMPLETED_KATAS"
+              echo "    ✅ Katas completadas: [$COMPLETED_KATAS]"
             else
               echo "  ⚠️  No se encontró progress.json - asumiendo kata 1"
               CURRENT_KATA=1
@@ -152,9 +159,11 @@ jobs:
                     cp -r "$TEMPLATE_SOURCE"/* "$KATA_DIR"/ 2>/dev/null || true
                     
                     # Restaurar trabajo del estudiante si existe
-                    for backup in "$KATA_DIR"/*.backup 2>/dev/null; do
-                      [ -f "$backup" ] && mv "$backup" "${backup%.backup}" 2>/dev/null || true
-                    done
+                    if ls "$KATA_DIR"/*.backup >/dev/null 2>&1; then
+                      for backup in "$KATA_DIR"/*.backup; do
+                        [ -f "$backup" ] && mv "$backup" "${backup%.backup}" 2>/dev/null || true
+                      done
+                    fi
                     
                     SYNC_CHANGES=1
                   fi
