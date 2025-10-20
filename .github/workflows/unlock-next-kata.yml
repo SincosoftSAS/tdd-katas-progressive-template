@@ -78,6 +78,41 @@ jobs:
           
           echo "✅ Kata definition saved to katas/$NEXT_KATA-$KATA_NAME/README.md"
       
+      - name: Sync workflows and definitions from template
+        if: steps.next.outputs.exists == 'true'
+        env:
+          REPO_OWNER: ${{ github.repository_owner }}
+        run: |
+          echo "🔄 Syncing latest workflows and kata definitions from template..."
+          
+          git config user.name "GitHub Actions Bot"
+          git config user.email "actions@github.com"
+          
+          # Add template remote (now public)
+          git remote add template https://github.com/$REPO_OWNER/tdd-katas-progressive-template.git || true
+          git fetch template master
+          
+          # Sync workflows
+          echo "📥 Syncing workflows..."
+          git checkout template/master -- .github/workflows/ || echo "⚠️ No workflow changes to sync"
+          
+          # Sync kata definitions (all available katas)
+          echo "📥 Syncing kata definitions..."
+          git checkout template/master -- .github/kata-definitions/ || echo "⚠️ No kata definition changes to sync"
+          
+          # Check if there are changes
+          if git diff --staged --quiet; then
+            echo "✅ Already up to date with template"
+          else
+            git commit -m "🔄 Sync workflows and kata definitions from template" \
+              -m "Automatically synced before unlocking next kata to ensure latest version."
+            git push origin main
+            echo "✅ Template sync completed and pushed to main"
+          fi
+          
+          # Remove template remote
+          git remote remove template
+      
       - name: Create branch for next kata
         if: steps.next.outputs.exists == 'true'
         id: create_branch
