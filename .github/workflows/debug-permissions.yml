@@ -1,0 +1,56 @@
+name: 🔍 Debug Permissions
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+  actions: write
+
+jobs:
+  debug:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 🔧 Setup GitHub CLI
+        run: |
+          gh auth login --with-token <<< "${{ secrets.GITHUB_TOKEN }}"
+
+      - name: 🔍 Check permissions
+        run: |
+          echo "🔍 Verificando permisos..."
+          
+          # Verificar acceso a la organización
+          echo "📋 Repos de la organización:"
+          gh repo list ${{ github.repository_owner }} --limit 5
+          
+          echo ""
+          echo "🔑 Token info:"
+          gh auth status
+          
+          echo ""
+          echo "👤 Usuario actual:"
+          gh api user --jq '.login'
+          
+          echo ""
+          echo "🏢 Permisos en organización:"
+          gh api "orgs/${{ github.repository_owner }}/members/$USER" 2>/dev/null || echo "No es miembro visible"
+
+      - name: 🎯 Test specific student repo
+        run: |
+          # Probar con un repo específico
+          echo "🎯 Probando acceso a repo estudiante..."
+          
+          STUDENT_REPO="katas-tdd-didierymartinez"
+          
+          echo "📋 Info del repo:"
+          gh repo view "${{ github.repository_owner }}/$STUDENT_REPO" --json name,owner,permissions || echo "No acceso al repo"
+          
+          echo ""
+          echo "🔧 Intentando crear issue de prueba..."
+          gh issue create \
+            --repo "${{ github.repository_owner }}/$STUDENT_REPO" \
+            --title "Test - Ignore" \
+            --body "Prueba de permisos - ignorar" || echo "No se pudo crear issue"

@@ -1,4 +1,4 @@
-name: 🔄 Sync to Students (Fixed)
+name: 🔄 Sync to Students (GH CLI)
 
 on:
   workflow_dispatch:
@@ -23,16 +23,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: 🔧 Setup GitHub CLI
+        run: |
+          gh auth login --with-token <<< "${{ secrets.GITHUB_TOKEN }}"
+
       - name: 🔍 Find student repos
         id: find
         run: |
           echo "🔍 Buscando repos con prefijo: ${{ inputs.assignment_prefix }}"
           
-          # Obtener repos que contienen "katas-tdd" y excluir templates
-          curl -s \
-            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            "https://api.github.com/orgs/${{ github.repository_owner }}/repos?per_page=100" \
-            | jq -r '.[] | select(.name | contains("katas-tdd")) | select(.name != "tdd-katas-progressive-template") | select(.name | endswith("-template") | not) | .name' \
+          # Usar gh para obtener repos de la organización
+          gh repo list ${{ github.repository_owner }} \
+            --json name \
+            --jq '.[] | select(.name | contains("katas-tdd")) | select(.name != "tdd-katas-progressive-template") | select(.name | endswith("-template") | not) | .name' \
             > student_repos.txt
           
           TOTAL=$(cat student_repos.txt | wc -l)
@@ -57,7 +60,7 @@ jobs:
           echo ""
           echo "💡 Para ejecutar: vuelve a correr con dry_run=false"
 
-      - name: 📤 Create PRs
+      - name: 📤 Create PRs with GitHub CLI
         if: inputs.dry_run == false
         run: |
           echo "📤 Creando PRs en ${{ steps.find.outputs.total }} repositorios..."
@@ -65,30 +68,42 @@ jobs:
           SUCCESS=0
           FAILED=0
           
+          # Crear una rama temporal para el PR
+          BRANCH_NAME="template-updates-$(date +%Y%m%d-%H%M%S)"
+          
           cat student_repos.txt | while read repo; do
             [ -z "$repo" ] && continue
             
             echo "🔄 $repo"
             
-            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
-              -X POST \
-              -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-              -H "Accept: application/vnd.github.v3+json" \
-              "https://api.github.com/repos/${{ github.repository_owner }}/$repo/pulls" \
-              -d '{
-                "title": "🔧 Template Updates - Sistema Mejorado",
-                "body": "## 🔧 Actualizaciones del Template\n\n### ✅ Mejoras:\n- Kata-1 limpio (sin archivos extra)\n- Kata-2 con estructura .NET completa\n- Tests optimizados (2 ejemplos por kata)\n- Workflow de desbloqueo corregido\n\n### 📋 Acción:\n**Acepta este PR** para recibir las mejoras.\n\n*Tu progreso se mantiene intacto.*",
-                "head": "${{ github.repository_owner }}:${{ github.ref_name }}",
-                "base": "main"
-              }')
+            # Intentar crear PR usando gh cli
+            PR_BODY="## 🔧 Actualizaciones del Template
+
+### ✅ Mejoras:
+- Kata-1 limpio (sin archivos extra)
+- Kata-2 con estructura .NET completa  
+- Tests optimizados (2 ejemplos por kata)
+- Workflow de desbloqueo corregido
+
+### 📋 Acción:
+Acepta este PR para recibir las mejoras.
+
+Tu progreso se mantiene intacto."
+
+            if gh pr create \
+              --repo "${{ github.repository_owner }}/$repo" \
+              --title "🔧 Template Updates - Sistema Mejorado" \
+              --body "$PR_BODY" \
+              --head "${{ github.repository_owner }}:${{ github.ref_name }}" \
+              --base "main" 2>/dev/null; then
+              echo "  ✅ PR creado"
+              SUCCESS=$((SUCCESS + 1))
+            else
+              echo "  ❌ Error creando PR (posible falta de acceso)"
+              FAILED=$((FAILED + 1))
+            fi
             
-            case $HTTP_CODE in
-              201) echo "  ✅ PR creado"; SUCCESS=$((SUCCESS + 1)) ;;
-              422) echo "  ⚠️  Ya existe o sin cambios" ;;
-              *) echo "  ❌ Error $HTTP_CODE"; FAILED=$((FAILED + 1)) ;;
-            esac
-            
-            sleep 1
+            sleep 2
           done
           
           echo ""
