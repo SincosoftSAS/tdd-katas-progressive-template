@@ -1,0 +1,166 @@
+name: 🔄 Sync Template Updates to Students
+
+on:
+  workflow_dispatch:  # Permite ejecutar manualmente
+    inputs:
+      assignment_prefix:
+        description: 'Prefijo de repos de estudiantes (ej: tdd-katas)'
+        required: true
+        default: 'tdd-katas'
+      pr_title:
+        description: 'Título del PR'
+        required: true
+        default: '🔧 Template Updates - Sistema de Katas Mejorado'
+      dry_run:
+        description: 'Solo mostrar qué se haría (no crear PRs)'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  pull-requests: write
+  repository-projects: write
+
+jobs:
+  sync-to-students:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 🔍 Checkout template repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 📋 Get student repositories
+        id: get-repos
+        run: |
+          echo "🔍 Buscando repositorios de estudiantes..."
+          
+          # Obtener lista de repos que empiecen con el prefijo
+          REPOS=$(curl -s \
+            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/orgs/${{ github.repository_owner }}/repos?per_page=100&type=all" \
+            | jq -r '.[] | select(.name | startswith("${{ inputs.assignment_prefix }}")) | .name')
+          
+          if [ -z "$REPOS" ]; then
+            echo "❌ No se encontraron repositorios con prefijo '${{ inputs.assignment_prefix }}'"
+            exit 1
+          fi
+          
+          REPO_COUNT=$(echo "$REPOS" | wc -l)
+          echo "✅ Encontrados $REPO_COUNT repositorios de estudiantes"
+          
+          # Guardar lista para el siguiente step
+          echo "$REPOS" > student_repos.txt
+          echo "repo_count=$REPO_COUNT" >> $GITHUB_OUTPUT
+          echo "repos_found=true" >> $GITHUB_OUTPUT
+
+      - name: 🌿 Create sync branch
+        id: create-branch
+        run: |
+          BRANCH_NAME="template-sync-$(date +%Y%m%d-%H%M%S)"
+          
+          echo "🌿 Creando rama: $BRANCH_NAME"
+          git checkout -b $BRANCH_NAME
+          git push origin $BRANCH_NAME
+          
+          echo "branch_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
+          echo "✅ Rama creada: $BRANCH_NAME"
+
+      - name: 📤 Create PRs for students
+        if: inputs.dry_run == false
+        run: |
+          BRANCH_NAME="${{ steps.create-branch.outputs.branch_name }}"
+          TOTAL_REPOS=${{ steps.get-repos.outputs.repo_count }}
+          CREATED_PRS=0
+          FAILED_PRS=0
+          
+          echo "📤 Creando PRs en $TOTAL_REPOS repositorios..."
+          echo ""
+          
+          while IFS= read -r repo_name; do
+            if [ -z "$repo_name" ]; then continue; fi
+            
+            echo "🔄 Procesando: $repo_name"
+            
+            # Intentar crear PR
+            PR_RESPONSE=$(curl -s -w "%{http_code}" \
+              -X POST \
+              -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+              -H "Accept: application/vnd.github.v3+json" \
+              "https://api.github.com/repos/${{ github.repository_owner }}/$repo_name/pulls" \
+              -d "{
+                \"title\": \"${{ inputs.pr_title }}\",
+                \"body\": \"## 🔧 Actualizaciones del Template\n\n### ✅ Mejoras Incluidas:\n- **Kata-1 limpio**: Eliminados archivos innecesarios (Class1.cs, duplicados)\n- **Kata-2 corregido**: Estructura .NET completa y funcional\n- **Tests optimizados**: Solo 2 ejemplos por kata para mejor TDD\n- **Server tests**: Sistema de evaluación automática mejorado\n- **Workflow corregido**: Sintaxis de desbloqueo automático arreglada\n\n### 🎯 Beneficios:\n- Mejor experiencia de aprendizaje TDD\n- Sistema de desbloqueo más confiable\n- Evaluación automática mejorada\n- Menos archivos confusos\n\n### 📋 Acción Requerida:\n**Acepta este PR** para recibir las mejoras del sistema.\n\n**Nota**: Tus cambios actuales se mantienen. Solo se actualizan archivos del template.\n\n---\n*Generado automáticamente por GitHub Actions*\",
+                \"head\": \"${{ github.repository_owner }}:$BRANCH_NAME\",
+                \"base\": \"main\"
+              }")
+            
+            HTTP_CODE="${PR_RESPONSE: -3}"
+            PR_BODY="${PR_RESPONSE%???}"
+            
+            if [ "$HTTP_CODE" = "201" ]; then
+              PR_URL=$(echo "$PR_BODY" | jq -r '.html_url')
+              echo "  ✅ PR creado: $PR_URL"
+              CREATED_PRS=$((CREATED_PRS + 1))
+            elif [ "$HTTP_CODE" = "422" ]; then
+              echo "  ⚠️  PR ya existe o no hay cambios"
+            else
+              echo "  ❌ Error ($HTTP_CODE): $(echo "$PR_BODY" | jq -r '.message // "Error desconocido"')"
+              FAILED_PRS=$((FAILED_PRS + 1))
+            fi
+            
+            # Pequeña pausa para evitar rate limiting
+            sleep 1
+            
+          done < student_repos.txt
+          
+          echo ""
+          echo "📊 Resumen de sincronización:"
+          echo "  - Repositorios procesados: $TOTAL_REPOS"
+          echo "  - PRs creados exitosamente: $CREATED_PRS"
+          echo "  - PRs fallidos: $FAILED_PRS"
+          echo "  - Rama utilizada: $BRANCH_NAME"
+
+      - name: 🔍 Dry run - Show what would happen
+        if: inputs.dry_run == true
+        run: |
+          BRANCH_NAME="${{ steps.create-branch.outputs.branch_name }}"
+          TOTAL_REPOS=${{ steps.get-repos.outputs.repo_count }}
+          
+          echo "🔍 DRY RUN - Mostrando qué se haría:"
+          echo ""
+          echo "📊 Configuración:"
+          echo "  - Prefijo: ${{ inputs.assignment_prefix }}"
+          echo "  - Rama: $BRANCH_NAME"
+          echo "  - Título PR: ${{ inputs.pr_title }}"
+          echo "  - Repositorios encontrados: $TOTAL_REPOS"
+          echo ""
+          echo "📋 Repositorios que recibirían PRs:"
+          
+          while IFS= read -r repo_name; do
+            if [ -z "$repo_name" ]; then continue; fi
+            echo "  - ${{ github.repository_owner }}/$repo_name"
+          done < student_repos.txt
+          
+          echo ""
+          echo "💡 Para ejecutar realmente, vuelve a correr sin 'dry_run'"
+
+      - name: 📋 Final summary
+        run: |
+          echo "🎉 Sincronización completada!"
+          echo ""
+          echo "📋 Próximos pasos para estudiantes:"
+          echo "  1. Recibirán notificación de nuevo PR"
+          echo "  2. Pueden revisar los cambios propuestos"
+          echo "  3. Al aceptar el PR, recibirán todas las mejoras"
+          echo "  4. Su progreso actual se mantiene intacto"
+          echo ""
+          echo "🔧 Mejoras incluidas en los PRs:"
+          echo "  - Kata-1 limpio (sin archivos innecesarios)"
+          echo "  - Kata-2 con estructura .NET completa"
+          echo "  - Tests reducidos a 2 ejemplos por kata"
+          echo "  - Sistema de evaluación automática mejorado"
