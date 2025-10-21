@@ -261,7 +261,7 @@ jobs:
               done
               
               if [ ! -f "../../failed-test-details.txt" ] || [ ! -s "../../failed-test-details.txt" ]; then
-                echo "❌ Some tests failed (run 'dotnet test' locally for details)" > ../../failed-test-details.txt
+                echo "❌ Algunas pruebas fallaron (ejecuta 'dotnet test' localmente para ver detalles)" > ../../failed-test-details.txt
               fi
             fi
             
@@ -390,8 +390,8 @@ jobs:
             
             # Tercer intento: versión simplificada
             if gh issue create \
-              --title "Kata $KATA_NUM: Test Failure" \
-              --body "Tests failed. Run 'dotnet test' in katas/kata-$KATA_NUM to see the specific error details and continue with TDD implementation." 2>&1; then
+              --title "Kata $KATA_NUM: Pruebas Fallaron" \
+              --body "Las pruebas fallaron. Ejecuta 'dotnet test' en katas/kata-$KATA_NUM para ver los detalles específicos de los errores y continúa con la implementación TDD." 2>&1; then
               echo "✅ Minimal issue created successfully"
               return 0
             fi
@@ -402,12 +402,12 @@ jobs:
           
           # Crear issue específico basado en el tipo de error
           if [[ "$ERROR_MSG" == *"Build failed"* ]]; then
-            ISSUE_BODY="🔨 Build Failed - Your code does not compile. Next Steps: 1) Run 'dotnet build' in katas/kata-$KATA_NUM to see the build errors 2) Fix the compilation errors in your code 3) Commit and push your changes to retry"
-            create_issue_safe "🔨 Kata $KATA_NUM: Build Error" "$ISSUE_BODY"
+            ISSUE_BODY="🔨 Error de Compilación - Tu código no compila. Pasos a seguir: 1) Ejecuta 'dotnet build' en katas/kata-$KATA_NUM para ver los errores de compilación 2) Corrige los errores de compilación en tu código 3) Haz commit y push de tus cambios para reintentar"
+            create_issue_safe "🔨 Kata $KATA_NUM: Error de Compilación" "$ISSUE_BODY"
               
           elif [[ "$ERROR_MSG" == *"Server build failed"* ]]; then
-            ISSUE_BODY="⚙️ Server Integration Error - Your code compiles but there is an issue with the server test integration. Possible Causes: Namespace mismatch, Class name doesn't match expected format, Missing public access modifiers. Next Steps: 1) Check that your namespaces and class names match the expected format 2) Ensure your main classes are public 3) Commit and push your changes to retry"
-            create_issue_safe "⚙️ Kata $KATA_NUM: Server Integration Error" "$ISSUE_BODY"
+            ISSUE_BODY="⚙️ Error de Integración del Servidor - Tu código compila pero hay un problema con la integración de las pruebas del servidor. Posibles Causas: Error en el namespace, El nombre de la clase no coincide con el formato esperado, Faltan modificadores de acceso público. Pasos a seguir: 1) Verifica que tus namespaces y nombres de clase coincidan con el formato esperado 2) Asegúrate de que tus clases principales sean públicas 3) Haz commit y push de tus cambios para reintentar"
+            create_issue_safe "⚙️ Kata $KATA_NUM: Error de Integración" "$ISSUE_BODY"
               
           else
             # Server tests failed - crear issue con detalles
@@ -431,21 +431,21 @@ jobs:
                 echo "📝 Formatted error messages: $FORMATTED_ERROR_MESSAGES"
               else
                 echo "⚠️ Content is empty or invalid"
-                FORMATTED_ERROR_MESSAGES="Tests failed but could not extract specific details"
+                FORMATTED_ERROR_MESSAGES="Las pruebas fallaron pero no se pudieron extraer detalles específicos"
               fi
             else
               echo "⚠️ failed-test-details.txt not found"
-              FORMATTED_ERROR_MESSAGES="Tests failed but could not extract specific details"
+              FORMATTED_ERROR_MESSAGES="Las pruebas fallaron pero no se pudieron extraer detalles específicos"
             fi
             
             # Si aún no encontramos errores específicos, usar información general mejorada
             if [ -z "$FORMATTED_ERROR_MESSAGES" ]; then
-              FORMATTED_ERROR_MESSAGES="Some tests failed. Run 'dotnet test' in katas/kata-$KATA_NUM to see which specific tests are failing and their error messages"
-              FAILED_INFO="Tests failed - check locally for details"
+              FORMATTED_ERROR_MESSAGES="Algunas pruebas fallaron. Ejecuta 'dotnet test' en katas/kata-$KATA_NUM para ver qué pruebas específicas están fallando y sus mensajes de error"
+              FAILED_INFO="Pruebas fallaron - revisa localmente para más detalles"
             fi
             
             # Crear mensaje detallado del issue con formato mejorado
-            ISSUE_BODY="🧪 Server Tests Failed - Your kata is not yet complete. Status: Code compiles successfully but some functionality is missing. Failed Tests: $FORMATTED_ERROR_MESSAGES Next Steps: 1) Analyze the error messages above to understand what is expected 2) Implement the missing functionality to fix these specific issues 3) Use TDD approach: make one test pass at a time 4) Commit and push your changes to retry"
+            ISSUE_BODY="🧪 Pruebas del Servidor Fallaron - Tu kata aún no está completa. Estado: El código compila exitosamente pero falta alguna funcionalidad. Pruebas que Fallaron: $FORMATTED_ERROR_MESSAGES Pasos a seguir: 1) Analiza los mensajes de error de arriba para entender qué se espera 2) Implementa la funcionalidad faltante para corregir estos problemas específicos 3) Usa el enfoque TDD: haz que una prueba pase a la vez 4) Haz commit y push de tus cambios para reintentar"
             
-            create_issue_safe "🧪 Kata $KATA_NUM: Tests Failed" "$ISSUE_BODY"
+            create_issue_safe "🧪 Kata $KATA_NUM: Pruebas Fallaron" "$ISSUE_BODY"
           fi
