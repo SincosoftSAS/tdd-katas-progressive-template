@@ -402,11 +402,11 @@ jobs:
           
           # Crear issue específico basado en el tipo de error
           if [[ "$ERROR_MSG" == *"Build failed"* ]]; then
-            ISSUE_BODY="🔨 **Error de Compilación** - Tu código no compila.\n\n**Pasos a seguir:**\n1. Ejecuta \`dotnet build\` en \`katas/kata-$KATA_NUM\` para ver los errores de compilación\n2. Corrige los errores de compilación en tu código\n3. Haz commit y push de tus cambios para reintentar"
+            ISSUE_BODY="🔨 **Error de Compilación** - Tu código no compila."$'\n\n'"**Pasos a seguir:**"$'\n'"1. Ejecuta \`dotnet build\` en \`katas/kata-$KATA_NUM\` para ver los errores de compilación"$'\n'"2. Corrige los errores de compilación en tu código"$'\n'"3. Haz commit y push de tus cambios para reintentar"
             create_issue_safe "🔨 Kata $KATA_NUM: Error de Compilación" "$ISSUE_BODY"
               
           elif [[ "$ERROR_MSG" == *"Server build failed"* ]]; then
-            ISSUE_BODY="⚙️ **Error de Integración del Servidor** - Tu código compila pero hay un problema con la integración de las pruebas del servidor.\n\n**Posibles Causas:**\n- Error en el namespace\n- El nombre de la clase no coincide con el formato esperado\n- Faltan modificadores de acceso público\n\n**Pasos a seguir:**\n1. Verifica que tus namespaces y nombres de clase coincidan con el formato esperado\n2. Asegúrate de que tus clases principales sean públicas\n3. Haz commit y push de tus cambios para reintentar"
+            ISSUE_BODY="⚙️ **Error de Integración del Servidor** - Tu código compila pero hay un problema con la integración de las pruebas del servidor."$'\n\n'"**Posibles Causas:**"$'\n'"- Error en el namespace"$'\n'"- El nombre de la clase no coincide con el formato esperado"$'\n'"- Faltan modificadores de acceso público"$'\n\n'"**Pasos a seguir:**"$'\n'"1. Verifica que tus namespaces y nombres de clase coincidan con el formato esperado"$'\n'"2. Asegúrate de que tus clases principales sean públicas"$'\n'"3. Haz commit y push de tus cambios para reintentar"
             create_issue_safe "⚙️ Kata $KATA_NUM: Error de Integración" "$ISSUE_BODY"
               
           else
@@ -424,8 +424,8 @@ jobs:
               echo "Content found: $DETAILED_ERROR_CONTENT"
               
               if [ -n "$DETAILED_ERROR_CONTENT" ] && [ "$DETAILED_ERROR_CONTENT" != "Could not extract test failure details" ]; then
-                # Formatear los mensajes para el issue (cada prueba en su línea con \n)
-                FORMATTED_ERROR_MESSAGES=$(echo "$DETAILED_ERROR_CONTENT" | head -10 | tr '\n' '\n')
+                # Formatear los mensajes para el issue (cada prueba en su línea)
+                FORMATTED_ERROR_MESSAGES=$(echo "$DETAILED_ERROR_CONTENT" | head -10)
                 FAILED_COUNT=$(echo "$DETAILED_ERROR_CONTENT" | wc -l || echo "1")
                 FAILED_INFO="$FAILED_COUNT pruebas fallaron"
                 echo "📝 Formatted error messages: $FORMATTED_ERROR_MESSAGES"
@@ -440,12 +440,12 @@ jobs:
             
             # Si aún no encontramos errores específicos, usar información general mejorada
             if [ -z "$FORMATTED_ERROR_MESSAGES" ]; then
-              FORMATTED_ERROR_MESSAGES="❌ No se pudieron extraer los nombres específicos de las pruebas\n❌ Ejecuta \`dotnet test\` en \`katas/kata-$KATA_NUM\` para ver qué pruebas específicas están fallando"
+              FORMATTED_ERROR_MESSAGES="❌ No se pudieron extraer los nombres específicos de las pruebas"$'\n'"❌ Ejecuta \`dotnet test\` en \`katas/kata-$KATA_NUM\` para ver qué pruebas específicas están fallando"
               FAILED_INFO="Pruebas fallaron - revisa localmente para más detalles"
             fi
             
-            # Crear mensaje detallado del issue con formato mejorado y saltos de línea
-            ISSUE_BODY="🧪 **Pruebas del Servidor Fallaron** - Tu kata aún no está completa.\n\n**Estado:** El código compila exitosamente pero falta alguna funcionalidad.\n\n**Pruebas que Fallaron:**\n$FORMATTED_ERROR_MESSAGES\n\n**Pasos a seguir:**\n1. Analiza los mensajes de error de arriba para entender qué se espera\n2. Implementa la funcionalidad faltante para corregir estos problemas específicos\n3. Usa el enfoque TDD: haz que una prueba pase a la vez\n4. Haz commit y push de tus cambios para reintentar"
+            # Crear mensaje detallado del issue usando concatenación con saltos de línea reales
+            ISSUE_BODY="🧪 **Pruebas del Servidor Fallaron** - Tu kata aún no está completa."$'\n\n'"**Estado:** El código compila exitosamente pero falta alguna funcionalidad."$'\n\n'"**Pruebas que Fallaron:**"$'\n'"$FORMATTED_ERROR_MESSAGES"$'\n\n'"**Pasos a seguir:**"$'\n'"1. Analiza los mensajes de error de arriba para entender qué se espera"$'\n'"2. Implementa la funcionalidad faltante para corregir estos problemas específicos"$'\n'"3. Usa el enfoque TDD: haz que una prueba pase a la vez"$'\n'"4. Haz commit y push de tus cambios para reintentar"
             
             create_issue_safe "🧪 Kata $KATA_NUM: Pruebas Fallaron" "$ISSUE_BODY"
           fi
