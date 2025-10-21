@@ -296,7 +296,6 @@ jobs:
           create_issue_safe() {
             local title="$1"
             local body="$2"
-            local label="$3"
             
             echo "Creating issue: $title"
             echo "Body preview: ${body:0:100}..."
@@ -308,11 +307,10 @@ jobs:
             # Intentar crear issue paso a paso para debugging
             echo "Attempting to create issue with gh CLI..."
             
-            # Primer intento: con asignación
+            # Primer intento: con asignación (sin labels problemáticos)
             if gh issue create \
               --title "$safe_title" \
               --body "$safe_body" \
-              --label "$label" \
               --assignee "${{ github.actor }}" 2>&1; then
               echo "✅ Issue created and assigned successfully"
               return 0
@@ -323,8 +321,7 @@ jobs:
             # Segundo intento: sin asignación
             if gh issue create \
               --title "$safe_title" \
-              --body "$safe_body" \
-              --label "$label" 2>&1; then
+              --body "$safe_body" 2>&1; then
               echo "✅ Issue created successfully (without assignee)"
               return 0
             fi
@@ -334,8 +331,7 @@ jobs:
             # Tercer intento: versión simplificada
             if gh issue create \
               --title "Kata $KATA_NUM: Test Failure" \
-              --body "Tests failed. Check workflow logs for details: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
-              --label "$label" 2>&1; then
+              --body "Tests failed. Check workflow logs for details: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" 2>&1; then
               echo "✅ Minimal issue created successfully"
               return 0
             fi
@@ -346,16 +342,12 @@ jobs:
           
           # Crear issue específico basado en el tipo de error
           if [[ "$ERROR_MSG" == *"Build failed"* ]]; then
-            create_issue_safe \
-              "Kata $KATA_NUM: Build Error" \
-              "Build Failed - Your code does not compile. Run 'dotnet build' in katas/kata-$KATA_NUM to see the build errors. Check the workflow logs for detailed error information." \
-              "kata-$KATA_NUM,build-error"
+            ISSUE_BODY="🔨 Build Failed - Your code does not compile. Next Steps: 1) Run 'dotnet build' in katas/kata-$KATA_NUM to see the build errors 2) Fix the compilation errors in your code 3) Commit and push your changes to retry. Workflow Details: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            create_issue_safe "🔨 Kata $KATA_NUM: Build Error" "$ISSUE_BODY"
               
           elif [[ "$ERROR_MSG" == *"Server build failed"* ]]; then
-            create_issue_safe \
-              "Kata $KATA_NUM: Server Integration Error" \
-              "Server Integration Error - Your code compiles but there is an issue with the server test integration. Check that your namespaces and class names match the expected format." \
-              "kata-$KATA_NUM,integration-error"
+            ISSUE_BODY="⚙️ Server Integration Error - Your code compiles but there is an issue with the server test integration. Possible Causes: Namespace mismatch, Class name doesn't match expected format, Missing public access modifiers. Next Steps: 1) Check that your namespaces and class names match the expected format 2) Ensure your main classes are public 3) Commit and push your changes to retry. Workflow Details: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            create_issue_safe "⚙️ Kata $KATA_NUM: Server Integration Error" "$ISSUE_BODY"
               
           else
             # Server tests failed - crear issue con detalles
@@ -370,8 +362,6 @@ jobs:
               fi
             fi
             
-            create_issue_safe \
-              "Kata $KATA_NUM: Tests Failed" \
-              "Server Tests Failed - Your kata is not yet complete. Status: Code compiles successfully but some functionality is missing. Run 'dotnet test' in katas/kata-$KATA_NUM to see which tests are failing. $FAILED_INFO" \
-              "kata-$KATA_NUM,failed-tests"
+            ISSUE_BODY="🧪 Server Tests Failed - Your kata is not yet complete. Status: Code compiles successfully but some functionality is missing. Next Steps: 1) Run 'dotnet test' in katas/kata-$KATA_NUM to see which tests are failing 2) Continue implementing using TDD (Test-Driven Development) 3) Write code to make the failing tests pass 4) Commit and push your changes to retry. Test Results: $FAILED_INFO. Workflow Details: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            create_issue_safe "🧪 Kata $KATA_NUM: Tests Failed" "$ISSUE_BODY"
           fi
