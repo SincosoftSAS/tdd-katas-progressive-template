@@ -208,64 +208,61 @@ jobs:
             # Crear archivo temporal con toda la información de fallos
             cat ../../server-test-output.txt > ../../full-test-output.txt
             
-            # Extraer información estructurada de tests fallidos
-            STRUCTURED_FAILURES=""
+            # Inicializar archivo de fallos
+            echo "" > ../../structured-failures.txt
             
-            # Buscar tests fallidos con su contexto completo
-            grep -n "FAIL\|Failed.*:" ../../full-test-output.txt | while read -r line; do
-              line_num=$(echo "$line" | cut -d: -f1)
+            # Extraer tests fallidos usando un enfoque más directo
+            echo "🔍 Searching for failed tests..."
+            
+            # Buscar líneas que contienen FAIL o Failed y extraer nombres de tests
+            grep -E "FAIL|Failed" ../../full-test-output.txt | while IFS= read -r line; do
+              echo "Processing line: $line" >&2
               
-              # Extraer el nombre del test de diferentes formatos
-              TEST_NAME=""
-              if [[ "$line" =~ FAIL.*\.([A-Za-z_][A-Za-z0-9_]*) ]]; then
-                TEST_NAME=$(echo "$line" | grep -o '\.[A-Za-z_][A-Za-z0-9_]*$' | sed 's/^\.//' | sed 's/_/ /g')
-              elif [[ "$line" =~ Failed.*([A-Za-z_][A-Za-z0-9_]*) ]]; then
-                TEST_NAME=$(echo "$line" | grep -o 'Failed [A-Za-z_][A-Za-z0-9_]*' | sed 's/Failed //' | sed 's/_/ /g')
-              fi
-              
-              # Buscar el mensaje de error FluentAssertions en las siguientes líneas
-              ERROR_MSG=""
-              for i in {1..5}; do
-                next_line_num=$((line_num + i))
-                next_line=$(sed -n "${next_line_num}p" ../../full-test-output.txt)
-                if [[ "$next_line" =~ Expected.*to\ be.*but.*differs ]] || 
-                   [[ "$next_line" =~ Expected.*but.*found ]] || 
-                   [[ "$next_line" =~ Expected.*to\ have.*but ]] || 
-                   [[ "$next_line" =~ Expected.*collection ]]; then
-                  # Limpiar el mensaje de marcas de tiempo y prefijos
-                  ERROR_MSG=$(echo "$next_line" | sed 's/^\s*\[xUnit\.net.*\]\s*//' | sed 's/^\s*//')
-                  break
-                fi
-              done
-              
-              # Si encontramos tanto el nombre como el error, guardarlos
-              if [ -n "$TEST_NAME" ] && [ -n "$ERROR_MSG" ]; then
-                echo "❌ $TEST_NAME: $ERROR_MSG" >> ../../structured-failures.txt
-              elif [ -n "$TEST_NAME" ]; then
-                echo "❌ $TEST_NAME: Test failed" >> ../../structured-failures.txt
+              # Extraer nombre del test de diferentes patrones
+              if [[ "$line" =~ ServerTests\.([A-Za-z_][A-Za-z0-9_]*) ]]; then
+                # Patrón: FAIL ServerTests.Generate_WithOne_ReturnsListWithOne
+                RAW_NAME=$(echo "$line" | grep -o 'ServerTests\.[A-Za-z_][A-Za-z0-9_]*' | sed 's/ServerTests\.//')
+                CLEAN_NAME=$(echo "$RAW_NAME" | sed 's/_/ /g')
+                echo "❌ $CLEAN_NAME" >> ../../structured-failures.txt
+                echo "Found test: $CLEAN_NAME" >&2
+              elif [[ "$line" =~ Tests\.([A-Za-z_][A-Za-z0-9_]*) ]]; then
+                # Patrón: FAIL FizzBuzz.Tests.Generate_WithOne_ReturnsListWithOne
+                RAW_NAME=$(echo "$line" | grep -o 'Tests\.[A-Za-z_][A-Za-z0-9_]*' | sed 's/Tests\.//')
+                CLEAN_NAME=$(echo "$RAW_NAME" | sed 's/_/ /g')
+                echo "❌ $CLEAN_NAME" >> ../../structured-failures.txt
+                echo "Found test: $CLEAN_NAME" >&2
+              elif [[ "$line" =~ Failed\ ([A-Za-z_][A-Za-z0-9_]*) ]]; then
+                # Patrón: Failed Generate_WithOne_ReturnsListWithOne
+                RAW_NAME=$(echo "$line" | grep -o 'Failed [A-Za-z_][A-Za-z0-9_]*' | sed 's/Failed //')
+                CLEAN_NAME=$(echo "$RAW_NAME" | sed 's/_/ /g')
+                echo "❌ $CLEAN_NAME" >> ../../structured-failures.txt
+                echo "Found test: $CLEAN_NAME" >&2
               fi
             done
             
-            # Leer los fallos estructurados
-            if [ -f "../../structured-failures.txt" ]; then
-              STRUCTURED_FAILURES=$(cat ../../structured-failures.txt | sort -u)
-              if [ -n "$STRUCTURED_FAILURES" ]; then
-                echo "📝 Structured test failures identified:"
-                echo "$STRUCTURED_FAILURES"
-                echo "$STRUCTURED_FAILURES" > ../../failed-test-details.txt
-              else
-                echo "⚠️ Could not extract structured failure info, using fallback"
-                # Fallback: solo nombres de tests
-                FAILED_NAMES=$(cat ../../full-test-output.txt | grep -o "FAIL.*\.[A-Za-z_][A-Za-z0-9_]*$" | sed 's/.*\.//' | sed 's/_/ /g' | sort -u)
-                if [ -n "$FAILED_NAMES" ]; then
-                  echo "$FAILED_NAMES" | sed 's/^/❌ /' > ../../failed-test-details.txt
-                else
-                  echo "Could not extract test failure details" > ../../failed-test-details.txt
-                fi
-              fi
+            # Verificar si encontramos tests fallidos
+            if [ -f "../../structured-failures.txt" ] && [ -s "../../structured-failures.txt" ]; then
+              # Limpiar y deduplicar
+              sort -u ../../structured-failures.txt > ../../failed-test-details.txt
+              FOUND_TESTS=$(cat ../../failed-test-details.txt)
+              echo "📝 Failed tests identified:"
+              echo "$FOUND_TESTS"
             else
-              echo "⚠️ Could not process test failures"
-              echo "Could not extract test failure details" > ../../failed-test-details.txt
+              echo "⚠️ No failed tests found with structured approach, trying alternative..."
+              
+              # Método alternativo: buscar cualquier línea con "FAIL" y extraer lo que sigue
+              grep -o "FAIL.*" ../../full-test-output.txt | head -10 | while IFS= read -r fail_line; do
+                # Extraer la parte más probable del nombre del test
+                if [[ "$fail_line" =~ ([A-Za-z_][A-Za-z0-9_]{5,}) ]]; then
+                  RAW_NAME="${BASH_REMATCH[1]}"
+                  CLEAN_NAME=$(echo "$RAW_NAME" | sed 's/_/ /g')
+                  echo "❌ $CLEAN_NAME" >> ../../failed-test-details.txt
+                fi
+              done
+              
+              if [ ! -f "../../failed-test-details.txt" ] || [ ! -s "../../failed-test-details.txt" ]; then
+                echo "❌ Some tests failed (run 'dotnet test' locally for details)" > ../../failed-test-details.txt
+              fi
             fi
             
             echo ""
@@ -420,19 +417,30 @@ jobs:
             FORMATTED_ERROR_MESSAGES=""
             FAILED_INFO="Some tests failed"
             
+            echo "📋 Reading extracted test failures..."
+            
             if [ -f "failed-test-details.txt" ]; then
               DETAILED_ERROR_CONTENT=$(cat failed-test-details.txt 2>/dev/null || echo "")
+              echo "Content found: $DETAILED_ERROR_CONTENT"
+              
               if [ -n "$DETAILED_ERROR_CONTENT" ] && [ "$DETAILED_ERROR_CONTENT" != "Could not extract test failure details" ]; then
-                # Formatear los mensajes de error para el issue (mantener formato de líneas)
-                FORMATTED_ERROR_MESSAGES=$(echo "$DETAILED_ERROR_CONTENT" | head -10 | tr '\n' '|' | sed 's/|/ \\n/g' | sed 's/ \\n$//')
+                # Formatear los mensajes para el issue (preservar saltos de línea)
+                FORMATTED_ERROR_MESSAGES=$(echo "$DETAILED_ERROR_CONTENT" | head -10 | tr '\n' ' ')
                 FAILED_COUNT=$(echo "$DETAILED_ERROR_CONTENT" | wc -l || echo "1")
                 FAILED_INFO="$FAILED_COUNT test failures"
+                echo "📝 Formatted error messages: $FORMATTED_ERROR_MESSAGES"
+              else
+                echo "⚠️ Content is empty or invalid"
+                FORMATTED_ERROR_MESSAGES="Tests failed but could not extract specific details"
               fi
+            else
+              echo "⚠️ failed-test-details.txt not found"
+              FORMATTED_ERROR_MESSAGES="Tests failed but could not extract specific details"
             fi
             
-            # Si no encontramos errores específicos, usar información general
+            # Si aún no encontramos errores específicos, usar información general mejorada
             if [ -z "$FORMATTED_ERROR_MESSAGES" ]; then
-              FORMATTED_ERROR_MESSAGES="Run 'dotnet test' in katas/kata-$KATA_NUM to see detailed error messages"
+              FORMATTED_ERROR_MESSAGES="Some tests failed. Run 'dotnet test' in katas/kata-$KATA_NUM to see which specific tests are failing and their error messages"
               FAILED_INFO="Tests failed - check locally for details"
             fi
             
