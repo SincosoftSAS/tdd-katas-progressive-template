@@ -134,10 +134,25 @@ jobs:
           echo ""
           echo "📋 After adding server tests - test files content:"
           find . -name "*Tests.cs" -not -path "*/obj/*" -not -path "*/bin/*" | while read testfile; do
+            # Saltar archivos de template vacíos como UnitTest1.cs
+            if [[ "$(basename "$testfile")" == "UnitTest1.cs" ]]; then
+              echo "📄 $testfile: (skipping default template file)"
+              continue
+            fi
+            
             echo "📄 $testfile:"
             # Contar tanto [Fact] (xUnit) como [TestMethod] (MSTest) para compatibilidad
             FACT_COUNT=$(grep -c "\[Fact\]" "$testfile" 2>/dev/null || echo "0")
             TESTMETHOD_COUNT=$(grep -c "\[TestMethod\]" "$testfile" 2>/dev/null || echo "0")
+            
+            # Asegurar que son números válidos
+            if ! [[ "$FACT_COUNT" =~ ^[0-9]+$ ]]; then
+              FACT_COUNT=0
+            fi
+            if ! [[ "$TESTMETHOD_COUNT" =~ ^[0-9]+$ ]]; then
+              TESTMETHOD_COUNT=0
+            fi
+            
             TOTAL_TESTS=$((FACT_COUNT + TESTMETHOD_COUNT))
             echo "  xUnit [Fact] tests: $FACT_COUNT"
             echo "  MSTest [TestMethod] tests: $TESTMETHOD_COUNT" 
