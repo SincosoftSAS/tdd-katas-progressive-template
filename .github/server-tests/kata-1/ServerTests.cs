@@ -96,5 +96,14 @@ namespace FizzBuzz.Tests
             var expected = new[] { "1", "2", "Fizz", "4", "Buzz", "Fizz", "7", "8", "Fizz", "Buzz", "11", "Fizz", "13", "14", "FizzBuzz" };
             result.Should().BeEquivalentTo(expected);
         }
+
+        [Fact]
+        public void Test_Issue_Creation_System()
+        {
+            // Este test está diseñado para fallar y probar el sistema de creación de issues
+            // Con caracteres especiales que podrían causar problemas: "comillas", 'apostrofes', <tags>, &symbols
+            var result = FizzBuzzGenerator.Generate(1);
+            result[0].Should().Be("Este test debe fallar para probar el sistema de issues!");
+        }
     }
 }

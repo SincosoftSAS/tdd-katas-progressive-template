@@ -195,19 +195,46 @@ jobs:
             echo "result=failure" >> $GITHUB_OUTPUT
             echo "error_message=Server tests failed" >> $GITHUB_OUTPUT
             
-            # Extraer información específica de pruebas fallidas
-            FAILED_TESTS=$(cat ../../server-test-output.txt | grep -A 5 -B 2 "FAIL\|Failed:" || echo "Could not extract failed test details")
-            
             echo ""
             echo "📋 Detailed server test failure report:"
             cat ../../server-test-output.txt
             
             echo ""
+            echo "🔍 Extracting specific failed test information..."
+            
+            # Extraer nombres específicos de tests fallidos de diferentes formatos
+            FAILED_TEST_NAMES=""
+            
+            # Formato 1: "Failed Generate_WithOne_ReturnsListWithOne"
+            FAILED_NAMES_FORMAT1=$(cat ../../server-test-output.txt | grep -o "Failed [A-Za-z_][A-Za-z0-9_]*" | sed 's/Failed //' || echo "")
+            
+            # Formato 2: "FAIL FizzBuzz.Tests.ServerTests.Generate_WithOne_ReturnsListWithOne"  
+            FAILED_NAMES_FORMAT2=$(cat ../../server-test-output.txt | grep -o "FAIL.*\.[A-Za-z_][A-Za-z0-9_]*$" | sed 's/.*\.//' || echo "")
+            
+            # Formato 3: "[FAIL] FizzBuzz.Tests.ServerTests.Generate_WithOne_ReturnsListWithOne"
+            FAILED_NAMES_FORMAT3=$(cat ../../server-test-output.txt | grep -o "\[FAIL\].*\.[A-Za-z_][A-Za-z0-9_]*$" | sed 's/.*\.//' || echo "")
+            
+            # Combinar todos los nombres encontrados
+            ALL_FAILED_NAMES="$FAILED_NAMES_FORMAT1 $FAILED_NAMES_FORMAT2 $FAILED_NAMES_FORMAT3"
+            
+            # Limpiar y deduplicar nombres de tests fallidos
+            FAILED_TEST_NAMES=$(echo "$ALL_FAILED_NAMES" | tr ' ' '\n' | grep -v '^$' | sort -u | tr '\n' '|' | sed 's/|$//')
+            
+            if [ -n "$FAILED_TEST_NAMES" ]; then
+              READABLE_NAMES=$(echo "$FAILED_TEST_NAMES" | tr '|' '\n' | sed 's/_/ /g' | tr '\n' ',' | sed 's/,$//' | sed 's/,/, /g')
+              echo "📝 Failed test methods identified: $READABLE_NAMES"
+              echo "$FAILED_TEST_NAMES" > ../../failed-test-names.txt
+            else
+              echo "⚠️ Could not extract specific test names, using general failure info"
+              echo "UNKNOWN_TESTS" > ../../failed-test-names.txt
+            fi
+            
+            # Guardar información completa de pruebas fallidas para usar en el issue
+            cat ../../server-test-output.txt | grep -A 3 -B 1 "FAIL\|Failed\|✗" > ../../failed-tests-details.txt 2>/dev/null || echo "Could not extract detailed failure info" > ../../failed-tests-details.txt
+            
+            echo ""
             echo "💡 Keep implementing using TDD until all functionality is complete!"
             echo "📝 Server tests are comprehensive and test ALL required features."
-            
-            # Guardar información de pruebas fallidas para usar en el issue
-            echo "$FAILED_TESTS" > ../../failed-tests-details.txt
           fi
           
           # Limpiar
@@ -353,15 +380,37 @@ jobs:
             # Server tests failed - crear issue con detalles
             echo "Creating detailed test failure issue..."
             
-            # Extraer información de pruebas fallidas (simplificado)
+            # Extraer información específica de pruebas fallidas
             FAILED_INFO="Check workflow logs for detailed failure information"
-            if [ -f "failed-tests-details.txt" ]; then
-              FAILED_COUNT=$(wc -l < failed-tests-details.txt 2>/dev/null || echo "0")
-              if [ "$FAILED_COUNT" -gt 0 ]; then
-                FAILED_INFO="$FAILED_COUNT test failures detected"
+            SPECIFIC_FAILED_TESTS=""
+            
+            if [ -f "failed-test-names.txt" ]; then
+              FAILED_TEST_NAMES=$(cat failed-test-names.txt 2>/dev/null || echo "")
+              if [ -n "$FAILED_TEST_NAMES" ] && [ "$FAILED_TEST_NAMES" != "UNKNOWN_TESTS" ]; then
+                # Convertir nombres de tests a formato legible
+                SPECIFIC_FAILED_TESTS=$(echo "$FAILED_TEST_NAMES" | tr '|' '\n' | sed 's/_/ /g' | sed 's/^/• /' | tr '\n' ' ')
+                FAILED_COUNT=$(echo "$FAILED_TEST_NAMES" | tr '|' '\n' | wc -l)
+                FAILED_INFO="$FAILED_COUNT specific tests failed"
               fi
             fi
             
-            ISSUE_BODY="🧪 Server Tests Failed - Your kata is not yet complete. Status: Code compiles successfully but some functionality is missing. Next Steps: 1) Run 'dotnet test' in katas/kata-$KATA_NUM to see which tests are failing 2) Continue implementing using TDD (Test-Driven Development) 3) Write code to make the failing tests pass 4) Commit and push your changes to retry. Test Results: $FAILED_INFO. Workflow Details: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            # Si no encontramos tests específicos, usar información general
+            if [ -z "$SPECIFIC_FAILED_TESTS" ]; then
+              if [ -f "failed-tests-details.txt" ]; then
+                FAILED_COUNT=$(wc -l < failed-tests-details.txt 2>/dev/null || echo "0")
+                if [ "$FAILED_COUNT" -gt 0 ]; then
+                  FAILED_INFO="$FAILED_COUNT test failures detected"
+                fi
+              fi
+              SPECIFIC_FAILED_TESTS="Run 'dotnet test' locally to see specific test failures"
+            fi
+            
+            # Crear mensaje detallado del issue
+            if [ -n "$SPECIFIC_FAILED_TESTS" ] && [ "$SPECIFIC_FAILED_TESTS" != "Run 'dotnet test' locally to see specific test failures" ]; then
+              ISSUE_BODY="🧪 Server Tests Failed - Your kata is not yet complete. Status: Code compiles successfully but some functionality is missing. Failed Tests: $SPECIFIC_FAILED_TESTS Next Steps: 1) Focus on implementing the functionality for the failed tests listed above 2) Run 'dotnet test' in katas/kata-$KATA_NUM to see detailed error messages 3) Use TDD approach: make one test pass at a time 4) Commit and push your changes to retry. Test Results: $FAILED_INFO. Workflow Details: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            else
+              ISSUE_BODY="🧪 Server Tests Failed - Your kata is not yet complete. Status: Code compiles successfully but some functionality is missing. Next Steps: 1) Run 'dotnet test' in katas/kata-$KATA_NUM to see which tests are failing 2) Continue implementing using TDD (Test-Driven Development) 3) Write code to make the failing tests pass 4) Commit and push your changes to retry. Test Results: $FAILED_INFO. Workflow Details: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            fi
+            
             create_issue_safe "🧪 Kata $KATA_NUM: Tests Failed" "$ISSUE_BODY"
           fi
