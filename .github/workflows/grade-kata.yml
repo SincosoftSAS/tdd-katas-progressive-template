@@ -285,50 +285,93 @@ jobs:
           KATA_NUM=${{ steps.kata.outputs.number }}
           ERROR_MSG="${{ steps.test.outputs.error_message }}"
           
-          # Función para crear issue con asignación opcional
-          create_issue_with_optional_assignee() {
+          # Verificar configuración de GitHub CLI
+          echo "🔍 Checking GitHub CLI configuration..."
+          gh --version
+          gh auth status || echo "Auth status check failed"
+          echo "Repository: ${{ github.repository }}"
+          echo "Actor: ${{ github.actor }}"
+          
+          # Función para crear issue con manejo robusto de errores
+          create_issue_safe() {
             local title="$1"
             local body="$2"
             local label="$3"
             
             echo "Creating issue: $title"
-            if gh issue create --title "$title" --body "$body" --label "$label" --assignee "${{ github.actor }}" 2>/dev/null; then
-              echo "✅ Issue created and assigned to ${{ github.actor }}"
-            elif gh issue create --title "$title" --body "$body" --label "$label" 2>/dev/null; then
-              echo "✅ Issue created (assignment failed, but issue created successfully)"
-            else
-              echo "❌ Failed to create issue"
-              return 1
+            echo "Body preview: ${body:0:100}..."
+            
+            # Escapar caracteres especiales en el título y cuerpo
+            local safe_title=$(echo "$title" | sed 's/"/\\"/g')
+            local safe_body=$(echo "$body" | sed 's/"/\\"/g' | tr '\n' ' ')
+            
+            # Intentar crear issue paso a paso para debugging
+            echo "Attempting to create issue with gh CLI..."
+            
+            # Primer intento: con asignación
+            if gh issue create \
+              --title "$safe_title" \
+              --body "$safe_body" \
+              --label "$label" \
+              --assignee "${{ github.actor }}" 2>&1; then
+              echo "✅ Issue created and assigned successfully"
+              return 0
             fi
+            
+            echo "Assignment failed, trying without assignee..."
+            
+            # Segundo intento: sin asignación
+            if gh issue create \
+              --title "$safe_title" \
+              --body "$safe_body" \
+              --label "$label" 2>&1; then
+              echo "✅ Issue created successfully (without assignee)"
+              return 0
+            fi
+            
+            echo "Both attempts failed, trying with minimal content..."
+            
+            # Tercer intento: versión simplificada
+            if gh issue create \
+              --title "Kata $KATA_NUM: Test Failure" \
+              --body "Tests failed. Check workflow logs for details: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+              --label "$label" 2>&1; then
+              echo "✅ Minimal issue created successfully"
+              return 0
+            fi
+            
+            echo "❌ All attempts to create issue failed"
+            return 1
           }
           
           # Crear issue específico basado en el tipo de error
           if [[ "$ERROR_MSG" == *"Build failed"* ]]; then
-            create_issue_with_optional_assignee \
-              "🔨 Kata $KATA_NUM: Build Error" \
-              "❌ **Build Failed** - Your code doesn't compile. Run \`dotnet build\` in \`katas/kata-$KATA_NUM\` to see the build errors. Check the [workflow logs](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) for detailed error information." \
+            create_issue_safe \
+              "Kata $KATA_NUM: Build Error" \
+              "Build Failed - Your code does not compile. Run 'dotnet build' in katas/kata-$KATA_NUM to see the build errors. Check the workflow logs for detailed error information." \
               "kata-$KATA_NUM,build-error"
               
           elif [[ "$ERROR_MSG" == *"Server build failed"* ]]; then
-            create_issue_with_optional_assignee \
-              "🔧 Kata $KATA_NUM: Server Integration Error" \
-              "⚠️ **Server Integration Error** - Your code compiles but there's an issue with the server test integration. Check that your namespaces and class names match the expected format. Review the [workflow logs](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) for details." \
+            create_issue_safe \
+              "Kata $KATA_NUM: Server Integration Error" \
+              "Server Integration Error - Your code compiles but there is an issue with the server test integration. Check that your namespaces and class names match the expected format." \
               "kata-$KATA_NUM,integration-error"
               
           else
             # Server tests failed - crear issue con detalles
             echo "Creating detailed test failure issue..."
             
-            # Extraer información de pruebas fallidas
-            FAILED_INFO=""
+            # Extraer información de pruebas fallidas (simplificado)
+            FAILED_INFO="Check workflow logs for detailed failure information"
             if [ -f "failed-tests-details.txt" ]; then
-              FAILED_INFO="$(cat failed-tests-details.txt | head -5)"
-            else
-              FAILED_INFO="Check workflow logs for detailed failure information"
+              FAILED_COUNT=$(wc -l < failed-tests-details.txt 2>/dev/null || echo "0")
+              if [ "$FAILED_COUNT" -gt 0 ]; then
+                FAILED_INFO="$FAILED_COUNT test failures detected"
+              fi
             fi
             
-            create_issue_with_optional_assignee \
-              "🧪 Kata $KATA_NUM: Tests Failed" \
-              "❌ **Server Tests Failed** - Your kata is not yet complete. Status: Code compiles successfully but some functionality is missing. Run \`dotnet test\` in \`katas/kata-$KATA_NUM\` to see which tests are failing. Failed tests: $FAILED_INFO. Check the [complete workflow logs](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) for detailed test output." \
+            create_issue_safe \
+              "Kata $KATA_NUM: Tests Failed" \
+              "Server Tests Failed - Your kata is not yet complete. Status: Code compiles successfully but some functionality is missing. Run 'dotnet test' in katas/kata-$KATA_NUM to see which tests are failing. $FAILED_INFO" \
               "kata-$KATA_NUM,failed-tests"
           fi
