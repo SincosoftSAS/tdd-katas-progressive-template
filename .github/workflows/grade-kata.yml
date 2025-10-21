@@ -285,20 +285,35 @@ jobs:
           KATA_NUM=${{ steps.kata.outputs.number }}
           ERROR_MSG="${{ steps.test.outputs.error_message }}"
           
+          # Función para crear issue con asignación opcional
+          create_issue_with_optional_assignee() {
+            local title="$1"
+            local body="$2"
+            local label="$3"
+            
+            echo "Creating issue: $title"
+            if gh issue create --title "$title" --body "$body" --label "$label" --assignee "${{ github.actor }}" 2>/dev/null; then
+              echo "✅ Issue created and assigned to ${{ github.actor }}"
+            elif gh issue create --title "$title" --body "$body" --label "$label" 2>/dev/null; then
+              echo "✅ Issue created (assignment failed, but issue created successfully)"
+            else
+              echo "❌ Failed to create issue"
+              return 1
+            fi
+          }
+          
           # Crear issue específico basado en el tipo de error
           if [[ "$ERROR_MSG" == *"Build failed"* ]]; then
-            gh issue create \
-              --title "🔨 Kata $KATA_NUM: Build Error" \
-              --body "❌ **Build Failed** - Your code doesn't compile. Run \`dotnet build\` in \`katas/kata-$KATA_NUM\` to see the build errors. Check the [workflow logs](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) for detailed error information." \
-              --assignee "${{ github.actor }}" \
-              --label "kata-$KATA_NUM,build-error"
+            create_issue_with_optional_assignee \
+              "🔨 Kata $KATA_NUM: Build Error" \
+              "❌ **Build Failed** - Your code doesn't compile. Run \`dotnet build\` in \`katas/kata-$KATA_NUM\` to see the build errors. Check the [workflow logs](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) for detailed error information." \
+              "kata-$KATA_NUM,build-error"
               
           elif [[ "$ERROR_MSG" == *"Server build failed"* ]]; then
-            gh issue create \
-              --title "🔧 Kata $KATA_NUM: Server Integration Error" \
-              --body "⚠️ **Server Integration Error** - Your code compiles but there's an issue with the server test integration. Check that your namespaces and class names match the expected format. Review the [workflow logs](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) for details." \
-              --assignee "${{ github.actor }}" \
-              --label "kata-$KATA_NUM,integration-error"
+            create_issue_with_optional_assignee \
+              "🔧 Kata $KATA_NUM: Server Integration Error" \
+              "⚠️ **Server Integration Error** - Your code compiles but there's an issue with the server test integration. Check that your namespaces and class names match the expected format. Review the [workflow logs](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) for details." \
+              "kata-$KATA_NUM,integration-error"
               
           else
             # Server tests failed - crear issue con detalles
@@ -312,9 +327,8 @@ jobs:
               FAILED_INFO="Check workflow logs for detailed failure information"
             fi
             
-            gh issue create \
-              --title "🧪 Kata $KATA_NUM: Tests Failed" \
-              --body "❌ **Server Tests Failed** - Your kata is not yet complete. Status: Code compiles successfully but some functionality is missing. Run \`dotnet test\` in \`katas/kata-$KATA_NUM\` to see which tests are failing. Failed tests: $FAILED_INFO. Check the [complete workflow logs](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) for detailed test output." \
-              --assignee "${{ github.actor }}" \
-              --label "kata-$KATA_NUM,failed-tests"
+            create_issue_with_optional_assignee \
+              "🧪 Kata $KATA_NUM: Tests Failed" \
+              "❌ **Server Tests Failed** - Your kata is not yet complete. Status: Code compiles successfully but some functionality is missing. Run \`dotnet test\` in \`katas/kata-$KATA_NUM\` to see which tests are failing. Failed tests: $FAILED_INFO. Check the [complete workflow logs](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) for detailed test output." \
+              "kata-$KATA_NUM,failed-tests"
           fi
