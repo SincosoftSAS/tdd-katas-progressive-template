@@ -202,49 +202,70 @@ jobs:
             echo ""
             echo "🔍 Extracting specific failed test information..."
             
-            # Extraer errores específicos de FluentAssertions con mejor contexto
-            echo "📋 Extracting detailed error messages..."
+            # Extraer información de tests fallidos con nombres y errores específicos
+            echo "📋 Processing test failures..."
             
-            # Crear archivo temporal con información detallada de fallos
-            cat ../../server-test-output.txt | grep -A 10 -B 2 "FAIL\|Failed\|\[FAIL\]" > ../../failed-tests-raw.txt 2>/dev/null || echo "" > ../../failed-tests-raw.txt
+            # Crear archivo temporal con toda la información de fallos
+            cat ../../server-test-output.txt > ../../full-test-output.txt
             
-            # Extraer mensajes de error específicos de FluentAssertions
-            DETAILED_FAILURES=""
+            # Extraer información estructurada de tests fallidos
+            STRUCTURED_FAILURES=""
             
-            # Buscar patrones de errores de FluentAssertions
-            while IFS= read -r line; do
-              if [[ "$line" =~ Expected.*to\ be.*but.*differs ]]; then
-                DETAILED_FAILURES="${DETAILED_FAILURES}• $line\n"
-              elif [[ "$line" =~ Expected.*but.*found ]]; then
-                DETAILED_FAILURES="${DETAILED_FAILURES}• $line\n"
-              elif [[ "$line" =~ Expected.*to\ have.*but ]]; then
-                DETAILED_FAILURES="${DETAILED_FAILURES}• $line\n"
-              elif [[ "$line" =~ Expected.*collection ]]; then
-                DETAILED_FAILURES="${DETAILED_FAILURES}• $line\n"
+            # Buscar tests fallidos con su contexto completo
+            grep -n "FAIL\|Failed.*:" ../../full-test-output.txt | while read -r line; do
+              line_num=$(echo "$line" | cut -d: -f1)
+              
+              # Extraer el nombre del test de diferentes formatos
+              TEST_NAME=""
+              if [[ "$line" =~ FAIL.*\.([A-Za-z_][A-Za-z0-9_]*) ]]; then
+                TEST_NAME=$(echo "$line" | grep -o '\.[A-Za-z_][A-Za-z0-9_]*$' | sed 's/^\.//' | sed 's/_/ /g')
+              elif [[ "$line" =~ Failed.*([A-Za-z_][A-Za-z0-9_]*) ]]; then
+                TEST_NAME=$(echo "$line" | grep -o 'Failed [A-Za-z_][A-Za-z0-9_]*' | sed 's/Failed //' | sed 's/_/ /g')
               fi
-            done < ../../failed-tests-raw.txt
-            
-            # Si no encontramos errores de FluentAssertions, buscar nombres de tests y otros errores
-            if [ -z "$DETAILED_FAILURES" ]; then
-              # Extraer nombres de tests fallidos como fallback
-              FAILED_NAMES=$(cat ../../server-test-output.txt | grep -o "FAIL.*\.[A-Za-z_][A-Za-z0-9_]*$" | sed 's/.*\.//' | sed 's/_/ /g' || echo "")
-              if [ -n "$FAILED_NAMES" ]; then
-                while IFS= read -r testname; do
-                  if [ -n "$testname" ]; then
-                    DETAILED_FAILURES="${DETAILED_FAILURES}• Test failed: $testname\n"
-                  fi
-                done <<< "$FAILED_NAMES"
+              
+              # Buscar el mensaje de error FluentAssertions en las siguientes líneas
+              ERROR_MSG=""
+              for i in {1..5}; do
+                next_line_num=$((line_num + i))
+                next_line=$(sed -n "${next_line_num}p" ../../full-test-output.txt)
+                if [[ "$next_line" =~ Expected.*to\ be.*but.*differs ]] || 
+                   [[ "$next_line" =~ Expected.*but.*found ]] || 
+                   [[ "$next_line" =~ Expected.*to\ have.*but ]] || 
+                   [[ "$next_line" =~ Expected.*collection ]]; then
+                  # Limpiar el mensaje de marcas de tiempo y prefijos
+                  ERROR_MSG=$(echo "$next_line" | sed 's/^\s*\[xUnit\.net.*\]\s*//' | sed 's/^\s*//')
+                  break
+                fi
+              done
+              
+              # Si encontramos tanto el nombre como el error, guardarlos
+              if [ -n "$TEST_NAME" ] && [ -n "$ERROR_MSG" ]; then
+                echo "❌ $TEST_NAME: $ERROR_MSG" >> ../../structured-failures.txt
+              elif [ -n "$TEST_NAME" ]; then
+                echo "❌ $TEST_NAME: Test failed" >> ../../structured-failures.txt
               fi
-            fi
+            done
             
-            # Guardar información detallada de errores
-            if [ -n "$DETAILED_FAILURES" ]; then
-              echo -e "$DETAILED_FAILURES" > ../../failed-test-details.txt
-              echo "📝 Detailed failure messages extracted:"
-              echo -e "$DETAILED_FAILURES"
+            # Leer los fallos estructurados
+            if [ -f "../../structured-failures.txt" ]; then
+              STRUCTURED_FAILURES=$(cat ../../structured-failures.txt | sort -u)
+              if [ -n "$STRUCTURED_FAILURES" ]; then
+                echo "📝 Structured test failures identified:"
+                echo "$STRUCTURED_FAILURES"
+                echo "$STRUCTURED_FAILURES" > ../../failed-test-details.txt
+              else
+                echo "⚠️ Could not extract structured failure info, using fallback"
+                # Fallback: solo nombres de tests
+                FAILED_NAMES=$(cat ../../full-test-output.txt | grep -o "FAIL.*\.[A-Za-z_][A-Za-z0-9_]*$" | sed 's/.*\.//' | sed 's/_/ /g' | sort -u)
+                if [ -n "$FAILED_NAMES" ]; then
+                  echo "$FAILED_NAMES" | sed 's/^/❌ /' > ../../failed-test-details.txt
+                else
+                  echo "Could not extract test failure details" > ../../failed-test-details.txt
+                fi
+              fi
             else
-              echo "⚠️ Could not extract specific error messages, using general failure info"
-              echo "Could not extract specific error details" > ../../failed-test-details.txt
+              echo "⚠️ Could not process test failures"
+              echo "Could not extract test failure details" > ../../failed-test-details.txt
             fi
             
             echo ""
@@ -395,28 +416,28 @@ jobs:
             # Server tests failed - crear issue con detalles
             echo "Creating detailed test failure issue..."
             
-            # Extraer mensajes de error específicos
-            DETAILED_ERROR_MESSAGES=""
+            # Extraer mensajes de error específicos estructurados
+            FORMATTED_ERROR_MESSAGES=""
             FAILED_INFO="Some tests failed"
             
             if [ -f "failed-test-details.txt" ]; then
               DETAILED_ERROR_CONTENT=$(cat failed-test-details.txt 2>/dev/null || echo "")
-              if [ -n "$DETAILED_ERROR_CONTENT" ] && [ "$DETAILED_ERROR_CONTENT" != "Could not extract specific error details" ]; then
-                # Limpiar y formatear los mensajes de error
-                DETAILED_ERROR_MESSAGES=$(echo "$DETAILED_ERROR_CONTENT" | tr '\n' ' ' | sed 's/• •/•/g')
-                FAILED_COUNT=$(echo "$DETAILED_ERROR_CONTENT" | grep -c "•" || echo "1")
-                FAILED_INFO="$FAILED_COUNT specific test failures"
+              if [ -n "$DETAILED_ERROR_CONTENT" ] && [ "$DETAILED_ERROR_CONTENT" != "Could not extract test failure details" ]; then
+                # Formatear los mensajes de error para el issue (mantener formato de líneas)
+                FORMATTED_ERROR_MESSAGES=$(echo "$DETAILED_ERROR_CONTENT" | head -10 | tr '\n' '|' | sed 's/|/ \\n/g' | sed 's/ \\n$//')
+                FAILED_COUNT=$(echo "$DETAILED_ERROR_CONTENT" | wc -l || echo "1")
+                FAILED_INFO="$FAILED_COUNT test failures"
               fi
             fi
             
             # Si no encontramos errores específicos, usar información general
-            if [ -z "$DETAILED_ERROR_MESSAGES" ]; then
-              DETAILED_ERROR_MESSAGES="Run 'dotnet test' in katas/kata-$KATA_NUM to see detailed error messages"
+            if [ -z "$FORMATTED_ERROR_MESSAGES" ]; then
+              FORMATTED_ERROR_MESSAGES="Run 'dotnet test' in katas/kata-$KATA_NUM to see detailed error messages"
               FAILED_INFO="Tests failed - check locally for details"
             fi
             
-            # Crear mensaje detallado del issue
-            ISSUE_BODY="🧪 Server Tests Failed - Your kata is not yet complete. Status: Code compiles successfully but some functionality is missing. Error Details: $DETAILED_ERROR_MESSAGES Next Steps: 1) Analyze the error messages above to understand what is expected 2) Implement the missing functionality to fix these specific issues 3) Use TDD approach: make one test pass at a time 4) Commit and push your changes to retry"
+            # Crear mensaje detallado del issue con formato mejorado
+            ISSUE_BODY="🧪 Server Tests Failed - Your kata is not yet complete. Status: Code compiles successfully but some functionality is missing. Failed Tests: $FORMATTED_ERROR_MESSAGES Next Steps: 1) Analyze the error messages above to understand what is expected 2) Implement the missing functionality to fix these specific issues 3) Use TDD approach: make one test pass at a time 4) Commit and push your changes to retry"
             
             create_issue_safe "🧪 Kata $KATA_NUM: Tests Failed" "$ISSUE_BODY"
           fi
