@@ -7,13 +7,6 @@
 sync-students.sh
 create-test-repo.sh
 
-# Documentación técnica interna
-DEBUG-WORKFLOW.md
-GUIA-SINCRONIZACION.md
-SISTEMA-DESBLOQUEO.md
-definicion.md
-.github/ADMIN-FILES.md
-
 # Archivos de configuración administrativa
 .adminignore
 
