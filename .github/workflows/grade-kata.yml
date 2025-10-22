@@ -293,6 +293,37 @@ jobs:
           
           echo "📊 Progress updated: Kata $CURRENT → Kata $NEXT"
 
+      - name: Close resolved issues
+        if: steps.test.outputs.result == 'success'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          KATA_NUM=${{ steps.kata.outputs.number }}
+          echo "🔍 Buscando issues abiertos para Kata $KATA_NUM..."
+          
+          # Buscar y cerrar todos los issues abiertos relacionados con esta kata
+          ISSUE_NUMBERS=$(gh issue list --repo ${{ github.repository }} \
+            --state open \
+            --search "Kata $KATA_NUM in:title" \
+            --json number \
+            --jq '.[].number' 2>/dev/null || echo "")
+          
+          if [ -n "$ISSUE_NUMBERS" ]; then
+            echo "✅ Cerrando issues resueltos..."
+            echo "$ISSUE_NUMBERS" | while read -r issue_num; do
+              if [ -n "$issue_num" ]; then
+                echo "Cerrando issue #$issue_num..."
+                gh issue close "$issue_num" \
+                  --repo ${{ github.repository }} \
+                  --comment "✅ **Problema Resuelto** - Todas las pruebas ahora pasan correctamente."$'\n\n'"🎉 **¡Excelente trabajo!** Has completado exitosamente la Kata $KATA_NUM."$'\n\n'"📈 **Siguiente paso:** Continúa con la siguiente kata para seguir mejorando tus habilidades de TDD." \
+                  2>/dev/null || echo "⚠️ No se pudo cerrar issue #$issue_num"
+              fi
+            done
+            echo "✨ Issues cerrados exitosamente"
+          else
+            echo "ℹ️ No hay issues abiertos para cerrar"
+          fi
+
       - name: Unlock next kata
         if: steps.test.outputs.result == 'success'
         run: |
@@ -314,6 +345,39 @@ jobs:
           else
             echo "🏆 All katas completed or next kata already exists!"
           fi
+
+      - name: Close old issues from previous katas
+        if: steps.test.outputs.result == 'success'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          CURRENT=${{ steps.kata.outputs.number }}
+          echo "🧹 Limpiando issues antiguos de katas anteriores..."
+          
+          # Cerrar issues de katas anteriores (1 a CURRENT-1)
+          for prev_kata in $(seq 1 $((CURRENT - 1))); do
+            echo "Buscando issues de Kata $prev_kata..."
+            
+            PREV_ISSUES=$(gh issue list --repo ${{ github.repository }} \
+              --state open \
+              --search "Kata $prev_kata in:title" \
+              --json number \
+              --jq '.[].number' 2>/dev/null || echo "")
+            
+            if [ -n "$PREV_ISSUES" ]; then
+              echo "$PREV_ISSUES" | while read -r issue_num; do
+                if [ -n "$issue_num" ]; then
+                  echo "Cerrando issue antiguo #$issue_num de Kata $prev_kata..."
+                  gh issue close "$issue_num" \
+                    --repo ${{ github.repository }} \
+                    --comment "📈 **Kata Superada** - Has avanzado exitosamente a la Kata $CURRENT."$'\n\n'"Este issue se cierra automáticamente ya que pertenece a una kata anterior que ya completaste."$'\n\n'"¡Sigue adelante con tu aprendizaje de TDD! 🚀" \
+                    2>/dev/null || echo "⚠️ No se pudo cerrar issue #$issue_num"
+                fi
+              done
+            fi
+          done
+          
+          echo "✨ Limpieza de issues completada"
 
       - name: Set final commit status
         if: always()
