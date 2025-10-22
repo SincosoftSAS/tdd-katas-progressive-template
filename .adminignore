@@ -3,9 +3,6 @@
 # NO deben sincronizarse a repos de estudiantes
 # ========================================
 
-# Scripts administrativos
-sync-students.sh
-
 # Archivos de configuración administrativa
 .adminignore
 
