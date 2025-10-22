@@ -236,8 +236,7 @@ jobs:
             CLEANED_COUNT=0
             
             # Archivos a eliminar en la raíz
-            for admin_file in sync-students.sh sync-manual.sh create-test-repo.sh \
-                              install-hooks.sh install-hooks.bat \
+            for admin_file in sync-students.sh create-test-repo.sh \
                               DEBUG-WORKFLOW.md GUIA-SINCRONIZACION.md \
                               SISTEMA-DESBLOQUEO.md definicion.md .adminignore; do
               if [ -f "$admin_file" ]; then
@@ -248,7 +247,7 @@ jobs:
             done
             
             # Carpetas administrativas en .github/
-            for admin_dir in .github/kata-templates .github/backups .github/hooks; do
+            for admin_dir in .github/kata-templates; do
               if [ -d "$admin_dir" ]; then
                 echo "    🗑️  Eliminando carpeta: $admin_dir"
                 rm -rf "$admin_dir"

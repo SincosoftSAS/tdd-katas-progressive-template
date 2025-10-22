@@ -5,10 +5,7 @@
 
 # Scripts administrativos
 sync-students.sh
-sync-manual.sh
 create-test-repo.sh
-install-hooks.sh
-install-hooks.bat
 
 # Documentación técnica interna
 DEBUG-WORKFLOW.md
@@ -22,13 +19,8 @@ definicion.md
 
 # Carpetas administrativas en .github/
 .github/kata-templates/
-.github/backups/
-.github/hooks/
 .github/workflows/sync-to-students.yml
 
-# Archivos temporales y de respaldo
-*.backup
-*.bak
-.admin/
+# Archivos temporales
 temp_repo/
 student_repos.txt

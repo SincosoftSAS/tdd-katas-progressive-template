@@ -9,10 +9,8 @@ Este documento explica cómo funciona el sistema de filtrado de archivos para as
 Los siguientes archivos **NUNCA** se sincronizan a repos de estudiantes:
 
 ### 📜 Scripts Administrativos
-- `sync-students.sh` - Script de sincronización manual
-- `sync-manual.sh` - Script de sincronización alternativo
+- `sync-students.sh` - Script de sincronización automática
 - `create-test-repo.sh` - Script para crear repos de prueba
-- `install-hooks.sh` / `install-hooks.bat` - Instaladores de git hooks
 
 ### 📚 Documentación Interna
 - `DEBUG-WORKFLOW.md` - Guía de debugging del workflow
@@ -20,16 +18,13 @@ Los siguientes archivos **NUNCA** se sincronizan a repos de estudiantes:
 - `SISTEMA-DESBLOQUEO.md` - Documentación técnica del sistema
 - `definicion.md` - Definiciones internas del proyecto
 - `.adminignore` - Este mismo archivo de configuración
+- `.github/ADMIN-FILES.md` - Documentación del sistema de filtrado
 
 ### 📁 Carpetas Administrativas
 - `.github/kata-templates/` - Templates de katas futuras (se copian bajo demanda)
-- `.github/backups/` - Respaldos del sistema
-- `.github/hooks/` - Git hooks personalizados
 - `.github/workflows/sync-to-students.yml` - Workflow de sincronización
 
 ### 🗂️ Archivos Temporales
-- `*.backup` / `*.bak` - Archivos de respaldo
-- `.admin/` - Carpeta administrativa
 - `temp_repo/` - Carpeta temporal de clonación
 - `student_repos.txt` - Lista temporal de repos
 
