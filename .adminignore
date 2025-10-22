@@ -8,6 +8,7 @@
 
 # Carpetas administrativas en .github/
 .github/kata-templates/
+.github/server-tests/
 .github/workflows/sync-to-students.yml
 
 # Archivos temporales

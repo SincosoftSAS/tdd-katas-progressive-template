@@ -218,18 +218,16 @@ jobs:
               fi
             done
             
-            # Sistema: Siempre actualizar (workflows, server tests)
+            # Sistema: Siempre actualizar workflow de evaluación
             echo "  🔧 Actualizando sistema..."
             if [ -f "../.github/workflows/grade-kata.yml" ]; then
               cp ../.github/workflows/grade-kata.yml .github/workflows/ 2>/dev/null || true
               SYNC_CHANGES=1
             fi
             
-            if [ -d "../.github/server-tests" ]; then
-              rm -rf .github/server-tests 2>/dev/null || true
-              cp -r ../.github/server-tests .github/ 2>/dev/null || true
-              SYNC_CHANGES=1
-            fi
+            # ⚠️ IMPORTANTE: server-tests NO se copian por seguridad
+            # Los server-tests se descargan desde el template durante la evaluación
+            # Esto previene que estudiantes vean las pruebas completas
             
             # 🧹 LIMPIAR ARCHIVOS ADMINISTRATIVOS (según .adminignore)
             echo "  🧹 Eliminando archivos administrativos..."
@@ -245,7 +243,7 @@ jobs:
             done
             
             # Carpetas administrativas en .github/
-            for admin_dir in .github/kata-templates; do
+            for admin_dir in .github/kata-templates .github/server-tests; do
               if [ -d "$admin_dir" ]; then
                 echo "    🗑️  Eliminando carpeta: $admin_dir"
                 rm -rf "$admin_dir"

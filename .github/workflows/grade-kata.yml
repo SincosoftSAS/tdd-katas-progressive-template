@@ -61,13 +61,25 @@ jobs:
             exit 1
           fi
           
-          # Verificar que existen las pruebas del servidor
-          if [ ! -d ".github/server-tests/kata-$KATA_NUM" ]; then
-            echo "❌ Server tests for kata-$KATA_NUM not found"
+          # 🔒 DESCARGAR SERVER TESTS desde el template (seguridad)
+          # Los server tests NO están en el repo del estudiante para prevenir que vean las pruebas
+          echo "🔐 Descargando server tests desde template..."
+          
+          TEMPLATE_REPO="SincosoftSAS/tdd-katas-progressive-template"
+          SERVER_TESTS_URL="https://raw.githubusercontent.com/$TEMPLATE_REPO/master/.github/server-tests/kata-$KATA_NUM/ServerTests.cs"
+          
+          mkdir -p ".github/server-tests/kata-$KATA_NUM"
+          
+          if ! curl -f -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+               -o ".github/server-tests/kata-$KATA_NUM/ServerTests.cs" \
+               "$SERVER_TESTS_URL" 2>/dev/null; then
+            echo "❌ Could not download server tests for kata-$KATA_NUM"
             echo "result=failure" >> $GITHUB_OUTPUT
-            echo "error_message=Server tests not found" >> $GITHUB_OUTPUT
+            echo "error_message=Server tests not found in template" >> $GITHUB_OUTPUT
             exit 1
           fi
+          
+          echo "✅ Server tests downloaded successfully"
           
           cd "katas/kata-$KATA_NUM"
           
