@@ -236,7 +236,7 @@ jobs:
             CLEANED_COUNT=0
             
             # Archivos a eliminar en la raíz
-            for admin_file in sync-students.sh create-test-repo.sh .adminignore; do
+            for admin_file in sync-students.sh .adminignore; do
               if [ -f "$admin_file" ]; then
                 echo "    🗑️  Eliminando: $admin_file"
                 rm -f "$admin_file"

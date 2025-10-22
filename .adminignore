@@ -5,7 +5,6 @@
 
 # Scripts administrativos
 sync-students.sh
-create-test-repo.sh
 
 # Archivos de configuración administrativa
 .adminignore
