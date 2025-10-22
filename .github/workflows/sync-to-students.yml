@@ -67,6 +67,28 @@ jobs:
           
           echo "🔧 Sincronización directa a master (sin PRs)"
           
+          # Función para verificar si un archivo debe ser excluido
+          should_exclude() {
+            local file="$1"
+            
+            # Leer patrones de .adminignore (ignorar comentarios y líneas vacías)
+            while IFS= read -r pattern; do
+              # Saltar comentarios y líneas vacías
+              [[ "$pattern" =~ ^[[:space:]]*# ]] && continue
+              [[ -z "$pattern" ]] && continue
+              
+              # Convertir patrón a regex simple
+              pattern=$(echo "$pattern" | sed 's/\./\\./g' | sed 's/\*/.*/g')
+              
+              # Verificar si el archivo coincide con el patrón
+              if [[ "$file" =~ $pattern ]]; then
+                return 0  # Sí debe excluirse
+              fi
+            done < .adminignore
+            
+            return 1  # No debe excluirse
+          }
+          
           SUCCESS=0
           FAILED=0
           
@@ -208,6 +230,40 @@ jobs:
               cp -r ../.github/server-tests .github/ 2>/dev/null || true
               SYNC_CHANGES=1
             fi
+            
+            # 🧹 LIMPIAR ARCHIVOS ADMINISTRATIVOS (según .adminignore)
+            echo "  🧹 Eliminando archivos administrativos..."
+            CLEANED_COUNT=0
+            
+            # Archivos a eliminar en la raíz
+            for admin_file in sync-students.sh sync-manual.sh create-test-repo.sh \
+                              install-hooks.sh install-hooks.bat \
+                              DEBUG-WORKFLOW.md GUIA-SINCRONIZACION.md \
+                              SISTEMA-DESBLOQUEO.md definicion.md .adminignore; do
+              if [ -f "$admin_file" ]; then
+                echo "    🗑️  Eliminando: $admin_file"
+                rm -f "$admin_file"
+                CLEANED_COUNT=$((CLEANED_COUNT + 1))
+              fi
+            done
+            
+            # Carpetas administrativas en .github/
+            for admin_dir in .github/kata-templates .github/backups .github/hooks; do
+              if [ -d "$admin_dir" ]; then
+                echo "    🗑️  Eliminando carpeta: $admin_dir"
+                rm -rf "$admin_dir"
+                CLEANED_COUNT=$((CLEANED_COUNT + 1))
+              fi
+            done
+            
+            # Eliminar workflow de sincronización (solo instructores)
+            if [ -f ".github/workflows/sync-to-students.yml" ]; then
+              echo "    🗑️  Eliminando workflow de sincronización"
+              rm -f ".github/workflows/sync-to-students.yml"
+              CLEANED_COUNT=$((CLEANED_COUNT + 1))
+            fi
+            
+            echo "    ✅ Limpiados $CLEANED_COUNT archivos/carpetas administrativos"
             
             # Verificar si hay cambios reales después de las operaciones
             git add . 2>/dev/null || true

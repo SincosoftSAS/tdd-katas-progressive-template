@@ -1,12 +1,34 @@
-# Archivos Solo para Instructores
+# ========================================
+# Archivos SOLO para Instructores
+# NO deben sincronizarse a repos de estudiantes
+# ========================================
 
 # Scripts administrativos
 sync-students.sh
-GUIA-SINCRONIZACION.md
-DEBUG-WORKFLOW.md
-SISTEMA-DESBLOQUEO.md
+sync-manual.sh
+create-test-repo.sh
+install-hooks.sh
+install-hooks.bat
 
 # Documentación técnica interna
+DEBUG-WORKFLOW.md
+GUIA-SINCRONIZACION.md
+SISTEMA-DESBLOQUEO.md
+definicion.md
+.github/ADMIN-FILES.md
+
+# Archivos de configuración administrativa
+.adminignore
+
+# Carpetas administrativas en .github/
+.github/kata-templates/
+.github/backups/
+.github/hooks/
+.github/workflows/sync-to-students.yml
+
+# Archivos temporales y de respaldo
 *.backup
 *.bak
 .admin/
+temp_repo/
+student_repos.txt
