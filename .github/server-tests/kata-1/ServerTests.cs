@@ -97,13 +97,5 @@ namespace FizzBuzz.Tests
             result.Should().BeEquivalentTo(expected);
         }
 
-        [Fact]
-        public void Test_Issue_Creation_System()
-        {
-            // Este test está diseñado para fallar y probar el sistema de creación de issues
-            // Con caracteres especiales que podrían causar problemas: "comillas", 'apostrofes', <tags>, &symbols
-            var result = FizzBuzzGenerator.Generate(1);
-            result[0].Should().Be("Este test debe fallar para probar el sistema de issues!");
-        }
     }
 }
