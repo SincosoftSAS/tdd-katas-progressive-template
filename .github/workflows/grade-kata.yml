@@ -282,9 +282,14 @@ jobs:
             echo ""
             echo "💡 Keep implementing using TDD until all functionality is complete!"
             echo "📝 Server tests are comprehensive and test ALL required features."
+            
+            # Limpiar y salir con error
+            cd ../../
+            rm -rf temp-server-tests
+            exit 1
           fi
           
-          # Limpiar
+          # Limpiar (solo si fue exitoso)
           cd ../../
           rm -rf temp-server-tests
 
