@@ -5,6 +5,8 @@ on:
     branches:
       - 'master'
       - 'main'
+    paths:
+      - 'katas/**'  # Solo ejecutar cuando hay cambios en carpetas de katas
 
 permissions:
   contents: write
