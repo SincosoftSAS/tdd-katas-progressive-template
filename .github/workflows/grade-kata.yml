@@ -313,6 +313,11 @@ jobs:
               echo "::group::📝 Failed tests identified:"
               echo "$FAILED_TESTS_CONTENT"
               echo "::endgroup::"
+
+              # Guardar en el job summary para que sea accesible desde la API
+              echo "## 📝 Failed Tests" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "$FAILED_TESTS_CONTENT" >> $GITHUB_STEP_SUMMARY
             else
               echo "failed_tests_details=❌ No se pudieron extraer detalles de tests fallidos" >> $GITHUB_OUTPUT
             fi
