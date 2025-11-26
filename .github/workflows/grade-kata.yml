@@ -25,12 +25,28 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Check if katas exist
+        id: check
+        run: |
+          # Verificar si existe alguna kata en el directorio katas/
+          if [ -d "katas" ] && [ "$(ls -A katas 2>/dev/null)" ]; then
+            echo "✅ Katas directory exists and is not empty"
+            echo "has_katas=true" >> $GITHUB_OUTPUT
+          else
+            echo "⏭️  Katas directory is empty or doesn't exist - skipping workflow"
+            echo "💡 This is normal for the initial commit from template"
+            echo "has_katas=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
       - name: Setup .NET
+        if: steps.check.outputs.has_katas == 'true'
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
 
       - name: Get current kata
+        if: steps.check.outputs.has_katas == 'true'
         id: kata
         run: |
           CURRENT=$(jq -r '.current_kata' .github/progress.json)
@@ -38,6 +54,7 @@ jobs:
           echo "🎯 Working on Kata $CURRENT"
 
       - name: Set commit status to pending
+        if: steps.check.outputs.has_katas == 'true'
         run: |
           curl -X POST \
             -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
@@ -50,6 +67,7 @@ jobs:
             }'
 
       - name: Run tests
+        if: steps.check.outputs.has_katas == 'true'
         id: test
         run: |
           KATA_NUM=${{ steps.kata.outputs.number }}
@@ -207,27 +225,26 @@ jobs:
           else
             echo "❌ SERVER TESTS FAILED - Kata $KATA_NUM not yet complete"
             echo "result=failure" >> $GITHUB_OUTPUT
-            echo "error_message=Server tests failed" >> $GITHUB_OUTPUT
-            
+
             echo ""
             echo "📋 Detailed server test failure report:"
             cat ../../server-test-output.txt
-            
+
             echo ""
             echo "🔍 Extracting specific failed test information..."
-            
+
             # Extraer información de tests fallidos con nombres y errores específicos
             echo "📋 Processing test failures..."
-            
+
             # Crear archivo temporal con toda la información de fallos
             cat ../../server-test-output.txt > ../../full-test-output.txt
-            
+
             # Inicializar archivo de fallos
             echo "" > ../../structured-failures.txt
-            
+
             # Extraer tests fallidos usando un enfoque más directo
             echo "🔍 Searching for failed tests..."
-            
+
             # Buscar líneas que contienen FAIL o Failed y extraer nombres de tests
             grep -E "FAIL|Failed" ../../full-test-output.txt | while IFS= read -r line; do
               echo "Processing line: $line" >&2
@@ -282,7 +299,24 @@ jobs:
             echo ""
             echo "💡 Keep implementing using TDD until all functionality is complete!"
             echo "📝 Server tests are comprehensive and test ALL required features."
-            
+
+            # Guardar la información de tests fallidos en el output del step
+            if [ -f "../../failed-test-details.txt" ]; then
+              FAILED_TESTS_CONTENT=$(cat ../../failed-test-details.txt)
+              # Usar delimitador EOF para contenido multilínea
+              echo "failed_tests_details<<EOF" >> $GITHUB_OUTPUT
+              echo "$FAILED_TESTS_CONTENT" >> $GITHUB_OUTPUT
+              echo "EOF" >> $GITHUB_OUTPUT
+
+              # También imprimir en formato especial para que el webhook pueda extraerlo
+              echo ""
+              echo "::group::📝 Failed tests identified:"
+              echo "$FAILED_TESTS_CONTENT"
+              echo "::endgroup::"
+            else
+              echo "failed_tests_details=❌ No se pudieron extraer detalles de tests fallidos" >> $GITHUB_OUTPUT
+            fi
+
             # Limpiar y salir con error
             cd ../../
             rm -rf temp-server-tests
@@ -294,7 +328,7 @@ jobs:
           rm -rf temp-server-tests
 
       - name: Update progress on success
-        if: steps.test.outputs.result == 'success'
+        if: steps.check.outputs.has_katas == 'true' && steps.test.outputs.result == 'success'
         run: |
           CURRENT=${{ steps.kata.outputs.number }}
           NEXT=$((CURRENT + 1))
@@ -313,7 +347,7 @@ jobs:
           echo "📊 Progress updated: Kata $CURRENT → Kata $NEXT"
 
       - name: Close resolved issues
-        if: steps.test.outputs.result == 'success'
+        if: steps.check.outputs.has_katas == 'true' && steps.test.outputs.result == 'success'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -344,7 +378,7 @@ jobs:
           fi
 
       - name: Unlock next kata
-        if: steps.test.outputs.result == 'success'
+        if: steps.check.outputs.has_katas == 'true' && steps.test.outputs.result == 'success'
         run: |
           CURRENT=${{ steps.kata.outputs.number }}
           NEXT=$((CURRENT + 1))
@@ -366,7 +400,7 @@ jobs:
           fi
 
       - name: Close old issues from previous katas
-        if: steps.test.outputs.result == 'success'
+        if: steps.check.outputs.has_katas == 'true' && steps.test.outputs.result == 'success'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -399,7 +433,7 @@ jobs:
           echo "✨ Limpieza de issues completada"
 
       - name: Set final commit status
-        if: always()
+        if: always() && steps.check.outputs.has_katas == 'true'
         run: |
           if [ "${{ steps.test.outputs.result }}" == "success" ]; then
             STATE="success"
@@ -421,7 +455,7 @@ jobs:
             }"
 
       - name: Create failure issue
-        if: steps.test.outputs.result == 'failure'
+        if: steps.check.outputs.has_katas == 'true' && steps.test.outputs.result == 'failure'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
