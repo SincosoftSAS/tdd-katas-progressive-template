@@ -31,8 +31,8 @@ Los tests incluidos son solo **ejemplos** para guiarte:
 
 ## 💻 Archivos de Trabajo
 
-- **Tu código**: `src/LeapYear.cs` ← Implementa aquí
-- **Tests ejemplo**: `tests/LeapYearTests.cs` ← Solo 2 ejemplos
+- **Tu código**: `src/LeapYear/LeapYearChecker.cs` ← Implementa aquí
+- **Tests ejemplo**: `tests/LeapYear.Tests/LeapYearCheckerTests.cs` ← Solo 2 ejemplos
 
 ## 🔄 Ciclo TDD
 
