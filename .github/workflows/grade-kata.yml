@@ -45,13 +45,42 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
-      - name: Get current kata
+      - name: Get current kata and detect changed kata
         if: steps.check.outputs.has_katas == 'true'
         id: kata
         run: |
           CURRENT=$(jq -r '.current_kata' .github/progress.json)
           echo "number=$CURRENT" >> $GITHUB_OUTPUT
-          echo "🎯 Working on Kata $CURRENT"
+          echo "🎯 Kata actual según progress.json: Kata $CURRENT"
+
+          # Detectar qué kata tuvo cambios en este commit
+          CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD 2>/dev/null || git diff --name-only HEAD)
+          echo "📝 Archivos modificados:"
+          echo "$CHANGED_FILES"
+
+          # Buscar qué katas tuvieron cambios
+          CHANGED_KATA=""
+          for kata_num in 1 2 3 4 5; do
+            if echo "$CHANGED_FILES" | grep -q "^katas/kata-$kata_num/"; then
+              CHANGED_KATA="$kata_num"
+              echo "📂 Cambios detectados en kata-$kata_num"
+            fi
+          done
+
+          # Guardar la kata que tuvo cambios
+          echo "changed_kata=$CHANGED_KATA" >> $GITHUB_OUTPUT
+
+          # Determinar si se debe desbloquear la siguiente kata
+          # Solo desbloquear si los cambios son en la kata ACTUAL
+          if [ -n "$CHANGED_KATA" ] && [ "$CHANGED_KATA" != "$CURRENT" ]; then
+            echo ""
+            echo "⚠️  Los cambios son en kata-$CHANGED_KATA pero la kata actual es kata-$CURRENT"
+            echo "ℹ️  Se evaluará pero NO se desbloqueará la siguiente kata"
+            echo "should_unlock=false" >> $GITHUB_OUTPUT
+          else
+            echo "✅ Cambios en la kata actual - se puede desbloquear si pasan los tests"
+            echo "should_unlock=true" >> $GITHUB_OUTPUT
+          fi
 
       - name: Set commit status to pending
         if: steps.check.outputs.has_katas == 'true'
@@ -333,7 +362,7 @@ jobs:
           rm -rf temp-server-tests
 
       - name: Update progress on success
-        if: steps.check.outputs.has_katas == 'true' && steps.test.outputs.result == 'success'
+        if: steps.check.outputs.has_katas == 'true' && steps.test.outputs.result == 'success' && steps.kata.outputs.should_unlock == 'true'
         run: |
           CURRENT=${{ steps.kata.outputs.number }}
           NEXT=$((CURRENT + 1))
@@ -342,17 +371,17 @@ jobs:
           jq ".current_kata = $NEXT | .completed_katas += [$CURRENT] | .last_updated = \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"" .github/progress.json > temp.json
           mv temp.json .github/progress.json
           
-          # Commit changes
+          # Commit changes - [skip ci] por seguridad
           git config user.name "TDD Bot"
           git config user.email "tdd-bot@github.com"
           git add .github/progress.json
-          git commit -m "Complete Kata $CURRENT" || true
+          git commit -m "✅ Complete Kata $CURRENT [skip ci]" || true
           git push origin ${{ github.ref_name }}
           
           echo "📊 Progress updated: Kata $CURRENT → Kata $NEXT"
 
       - name: Close resolved issues
-        if: steps.check.outputs.has_katas == 'true' && steps.test.outputs.result == 'success'
+        if: steps.check.outputs.has_katas == 'true' && steps.test.outputs.result == 'success' && steps.kata.outputs.should_unlock == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -383,7 +412,7 @@ jobs:
           fi
 
       - name: Unlock next kata
-        if: steps.check.outputs.has_katas == 'true' && steps.test.outputs.result == 'success'
+        if: steps.check.outputs.has_katas == 'true' && steps.test.outputs.result == 'success' && steps.kata.outputs.should_unlock == 'true'
         run: |
           CURRENT=${{ steps.kata.outputs.number }}
           NEXT=$((CURRENT + 1))
@@ -395,9 +424,9 @@ jobs:
             # Copy template to working directory
             cp -r ".github/kata-templates/kata-$NEXT" "katas/"
 
-            # Commit new kata
+            # Commit new kata - [skip ci] evita que este push dispare otro workflow
             git add "katas/kata-$NEXT"
-            git commit -m "🔓 Unlock Kata $NEXT" || true
+            git commit -m "🔓 Unlock Kata $NEXT [skip ci]" || true
             git push origin ${{ github.ref_name }}
 
             echo "✅ Kata $NEXT unlocked!"
@@ -406,7 +435,7 @@ jobs:
           fi
 
       - name: Close old issues from previous katas
-        if: steps.check.outputs.has_katas == 'true' && steps.test.outputs.result == 'success'
+        if: steps.check.outputs.has_katas == 'true' && steps.test.outputs.result == 'success' && steps.kata.outputs.should_unlock == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -445,10 +474,10 @@ jobs:
             STATE="success"
             DESC="✅ Tests passed! Kata ${{ steps.kata.outputs.number }} completed"
           else
-            STATE="failure"  
+            STATE="failure"
             DESC="❌ Tests failed - check logs for details"
           fi
-          
+
           curl -X POST \
             -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
             -H "Accept: application/vnd.github.v3+json" \
