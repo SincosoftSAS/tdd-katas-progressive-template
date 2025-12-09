@@ -387,18 +387,19 @@ jobs:
         run: |
           CURRENT=${{ steps.kata.outputs.number }}
           NEXT=$((CURRENT + 1))
-          
+
+          # Usar kata-templates locales (actualizados por sync-to-students)
           if [ -d ".github/kata-templates/kata-$NEXT" ] && [ ! -d "katas/kata-$NEXT" ]; then
             echo "🔓 Unlocking Kata $NEXT..."
-            
+
             # Copy template to working directory
             cp -r ".github/kata-templates/kata-$NEXT" "katas/"
-            
+
             # Commit new kata
             git add "katas/kata-$NEXT"
-            git commit -m "Unlock Kata $NEXT" || true
+            git commit -m "🔓 Unlock Kata $NEXT" || true
             git push origin ${{ github.ref_name }}
-            
+
             echo "✅ Kata $NEXT unlocked!"
           else
             echo "🏆 All katas completed or next kata already exists!"

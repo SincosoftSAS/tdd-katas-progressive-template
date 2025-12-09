@@ -58,70 +58,91 @@ jobs:
 
       - name: 📤 Auto Sync
         if: inputs.dry_run == false
+        env:
+          PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
         run: |
           echo "📤 Sincronización automática iniciada..."
-          
+
           # Configurar git
           git config --global user.name "GitHub Actions"
           git config --global user.email "actions@github.com"
-          
+
           echo "🔧 Sincronización directa a master (sin PRs)"
-          
-          # Función para verificar si un archivo debe ser excluido
-          should_exclude() {
-            local file="$1"
-            
-            # Leer patrones de .adminignore (ignorar comentarios y líneas vacías)
-            while IFS= read -r pattern; do
-              # Saltar comentarios y líneas vacías
-              [[ "$pattern" =~ ^[[:space:]]*# ]] && continue
-              [[ -z "$pattern" ]] && continue
-              
-              # Convertir patrón a regex simple
-              pattern=$(echo "$pattern" | sed 's/\./\\./g' | sed 's/\*/.*/g')
-              
-              # Verificar si el archivo coincide con el patrón
-              if [[ "$file" =~ $pattern ]]; then
-                return 0  # Sí debe excluirse
+
+          # Configuración del template remoto
+          TEMPLATE_REPO="${{ github.repository_owner }}/tdd-katas-progressive-template"
+          TEMPLATE_API_BASE="https://api.github.com/repos/$TEMPLATE_REPO/contents"
+
+          # Función para descargar directorio recursivamente desde GitHub API
+          download_from_template() {
+            local api_path="$1"
+            local local_path="$2"
+
+            echo "    📂 Descargando: $api_path -> $local_path"
+
+            local api_url="$TEMPLATE_API_BASE/$api_path"
+            local response=$(curl -s -H "Authorization: token $PAT_TOKEN" \
+                                   -H "Accept: application/vnd.github.v3+json" \
+                                   "$api_url")
+
+            # Verificar si hay error
+            if echo "$response" | jq -e '.message' >/dev/null 2>&1; then
+              echo "    ⚠️ Error en API: $(echo "$response" | jq -r '.message')"
+              return 1
+            fi
+
+            # Crear directorio local
+            mkdir -p "$local_path"
+
+            # Procesar cada elemento
+            echo "$response" | jq -c '.[]' 2>/dev/null | while read -r item; do
+              local name=$(echo "$item" | jq -r '.name')
+              local type=$(echo "$item" | jq -r '.type')
+              local download_url=$(echo "$item" | jq -r '.download_url')
+              local item_path=$(echo "$item" | jq -r '.path')
+
+              if [ "$type" == "file" ]; then
+                echo "      📄 $name"
+                curl -s -H "Authorization: token $PAT_TOKEN" \
+                     -o "$local_path/$name" \
+                     "$download_url"
+              elif [ "$type" == "dir" ]; then
+                download_from_template "$item_path" "$local_path/$name"
               fi
-            done < .adminignore
-            
-            return 1  # No debe excluirse
+            done
+
+            return 0
           }
-          
+
           SUCCESS=0
           FAILED=0
-          
 
-          
           while read repo; do
             [ -z "$repo" ] && continue
-            
+
             echo ""
             echo "🔄 Procesando: $repo"
-            
+
             # Limpiar y clonar
             rm -rf temp_repo
-            if ! git clone "https://x-access-token:${{ secrets.PAT_TOKEN }}@github.com/${{ github.repository_owner }}/$repo.git" temp_repo; then
+            if ! git clone "https://x-access-token:$PAT_TOKEN@github.com/${{ github.repository_owner }}/$repo.git" temp_repo; then
               echo "  ❌ Error clonando"
               FAILED=$((FAILED + 1))
               continue
             fi
-            
+
             cd temp_repo
-            # Trabajar directamente en master - no crear branch
-            
+
             # Leer progreso del estudiante desde progress.json
             if [ -f ".github/progress.json" ]; then
               CURRENT_KATA=$(cat .github/progress.json | jq -r '.current_kata // 1' 2>/dev/null || echo "1")
-              
-              # Obtener katas completadas de forma más simple
+
               if cat .github/progress.json | jq -e '.completed_katas' >/dev/null 2>&1; then
                 COMPLETED_KATAS=$(cat .github/progress.json | jq -r '.completed_katas | join(" ")' 2>/dev/null || echo "")
               else
                 COMPLETED_KATAS=""
               fi
-              
+
               echo "  📋 Progreso del estudiante:"
               echo "    🎯 Kata actual: $CURRENT_KATA"
               echo "    ✅ Katas completadas: [$COMPLETED_KATAS]"
@@ -130,167 +151,144 @@ jobs:
               CURRENT_KATA=1
               COMPLETED_KATAS=""
             fi
-            
-            # Determinar qué katas están disponibles/desbloqueadas
-            UNLOCKED_KATAS=""
-            for kata_num in 1 2 3 4 5; do
-              if [ $kata_num -le $CURRENT_KATA ]; then
-                UNLOCKED_KATAS="$UNLOCKED_KATAS kata-$kata_num"
-              fi
-            done
-            echo "  📋 Katas desbloqueadas:$UNLOCKED_KATAS"
-            
-            # Aplicar actualizaciones basadas en progreso
+
             SYNC_CHANGES=0
-            
-            # Lógica de sincronización inteligente
-            for kata_num in 1 2 3 4 5; do
-              if echo "$UNLOCKED_KATAS" | grep -q "kata-$kata_num"; then
-                
-                # Determinar el template source
-                if [ $kata_num -eq 1 ] && [ -d "../katas/kata-1" ]; then
-                  TEMPLATE_SOURCE="../katas/kata-1"
-                elif [ $kata_num -gt 1 ] && [ -d "../.github/kata-templates/kata-$kata_num" ]; then
-                  TEMPLATE_SOURCE="../.github/kata-templates/kata-$kata_num"
-                else
-                  continue  # No hay template para esta kata
+            KATA_DIR="katas/kata-$CURRENT_KATA"
+
+            # 🎯 SOLO ACTUALIZAR LA KATA ACTUAL (en progreso) DESDE EL TEMPLATE REMOTO
+            # Las katas completadas NO se tocan
+            echo "  🎯 Actualizando Kata-$CURRENT_KATA desde template remoto..."
+
+            # Determinar la ruta en el template
+            if [ $CURRENT_KATA -eq 1 ]; then
+              TEMPLATE_PATH="katas/kata-1"
+            else
+              TEMPLATE_PATH=".github/kata-templates/kata-$CURRENT_KATA"
+            fi
+
+            # Backup del trabajo actual si existe
+            if [ -d "$KATA_DIR" ]; then
+              if ! git diff --quiet HEAD -- "$KATA_DIR" 2>/dev/null; then
+                echo "    💾 Guardando trabajo actual en commit temporal"
+                git add "$KATA_DIR" 2>/dev/null || true
+                git commit -m "💾 Auto-backup: Trabajo en kata-$CURRENT_KATA antes de sync" 2>/dev/null || true
+              fi
+
+              echo "    🗑️  Eliminando kata actual para reemplazar"
+              rm -rf "$KATA_DIR"
+            fi
+
+            # Descargar kata actual desde el template remoto
+            echo "    📥 Descargando desde: $TEMPLATE_REPO/$TEMPLATE_PATH"
+            mkdir -p "katas"
+
+            if download_from_template "$TEMPLATE_PATH" "$KATA_DIR"; then
+              echo "    ✅ Kata-$CURRENT_KATA descargada desde template"
+
+              # Verificar que se descargaron archivos
+              if [ "$(ls -A "$KATA_DIR" 2>/dev/null)" ]; then
+                echo "    📋 Archivos sincronizados:"
+                find "$KATA_DIR" -type f | head -10
+                SYNC_CHANGES=1
+              else
+                echo "    ⚠️ No se descargaron archivos"
+              fi
+            else
+              echo "    ❌ Error descargando kata desde template"
+            fi
+
+            # Sistema: Descargar workflow de evaluación actualizado desde template
+            echo "  🔧 Actualizando workflow de evaluación desde template..."
+            mkdir -p .github/workflows
+
+            WORKFLOW_URL="https://raw.githubusercontent.com/$TEMPLATE_REPO/master/.github/workflows/grade-kata.yml"
+            if curl -sf -H "Authorization: token $PAT_TOKEN" \
+                 -o ".github/workflows/grade-kata.yml" \
+                 "$WORKFLOW_URL"; then
+              echo "    ✅ Workflow actualizado"
+              SYNC_CHANGES=1
+            else
+              echo "    ⚠️ No se pudo actualizar workflow"
+            fi
+
+            # 📦 SINCRONIZAR KATA-TEMPLATES (para que unlock funcione)
+            echo "  📦 Sincronizando kata-templates desde template..."
+
+            # Eliminar kata-templates antiguos y descargar frescos
+            rm -rf .github/kata-templates
+            mkdir -p .github/kata-templates
+
+            # Descargar todos los kata-templates del template remoto
+            for kata_num in 2 3 4 5; do
+              KATA_TEMPLATE_PATH=".github/kata-templates/kata-$kata_num"
+              echo "    📂 Descargando kata-$kata_num template..."
+
+              if download_from_template "$KATA_TEMPLATE_PATH" ".github/kata-templates/kata-$kata_num"; then
+                if [ "$(ls -A .github/kata-templates/kata-$kata_num 2>/dev/null)" ]; then
+                  echo "      ✅ kata-$kata_num template descargado"
+                  SYNC_CHANGES=1
                 fi
-                
-                KATA_DIR="katas/kata-$kata_num"
-                
-                # Decidir acción basada en progreso
-                if echo " $COMPLETED_KATAS " | grep -q " $kata_num "; then
-                  echo "  ✅ Kata-$kata_num: COMPLETADA - no tocar"
-                  
-                elif [ $kata_num -eq $CURRENT_KATA ]; then
-                  echo "  🎯 Kata-$kata_num: ACTIVA - REEMPLAZAR COMPLETAMENTE (conservar en commit)"
-                  
-                  # Para kata activa: SIEMPRE reemplazar completamente el template
-                  # Esto evita problemas con archivos movidos o estructuras modificadas
-                  if [ ! -d "$KATA_DIR" ]; then
-                    echo "    🆕 Creando kata activa"
-                    cp -r "$TEMPLATE_SOURCE" "$KATA_DIR" 2>/dev/null || true
-                    SYNC_CHANGES=1
-                  else
-                    echo "    🔄 REEMPLAZANDO template completo (trabajo previo queda en git history)"
-                    
-                    # IMPORTANTE: Hacer commit del trabajo actual antes del reemplazo
-                    if ! (cd "$KATA_DIR" && git diff --quiet HEAD -- . 2>/dev/null); then
-                      echo "    💾 Guardando trabajo actual en commit temporal"
-                      git add "$KATA_DIR" 2>/dev/null || true
-                      git commit -m "💾 Auto-backup: Trabajo en kata-$kata_num antes de sync template" 2>/dev/null || true
-                    else
-                      echo "    ℹ️  No hay trabajo sin commitear en kata-$kata_num"
-                    fi
-                    
-                    # Reemplazar completamente - no intentar preservar estructura modificada
-                    echo "    🔄 Aplicando template actualizado desde: $TEMPLATE_SOURCE"
-                    
-                    # Debug: mostrar qué hay antes
-                    echo "    📋 Antes del reemplazo:"
-                    ls -la "$KATA_DIR" 2>/dev/null || echo "    (directorio no existe)"
-                    
-                    rm -rf "$KATA_DIR" 2>/dev/null || true
-                    cp -r "$TEMPLATE_SOURCE" "$KATA_DIR" 2>/dev/null || true
-                    
-                    # Debug: mostrar qué hay después
-                    echo "    📋 Después del reemplazo:"
-                    ls -la "$KATA_DIR" 2>/dev/null || echo "    (error copiando)"
-                    
-                    SYNC_CHANGES=1
-                  fi
-                  
-                elif [ $kata_num -lt $CURRENT_KATA ]; then
-                  echo "  🟢 Kata-$kata_num: ANTERIOR - solo crear si no existe"
-                  
-                  if [ ! -d "$KATA_DIR" ]; then
-                    echo "    🆕 Creando kata anterior faltante"
-                    cp -r "$TEMPLATE_SOURCE" "$KATA_DIR" 2>/dev/null || true
-                    SYNC_CHANGES=1
-                  else
-                    echo "    ℹ️  Kata anterior ya existe - no tocar"
-                  fi
-                  
-                else
-                  echo "  🔒 Kata-$kata_num: FUTURA - no disponible aún"
-                fi
-                
+              else
+                echo "      ⚠️ kata-$kata_num template no encontrado (puede ser normal si no existe)"
               fi
             done
-            
-            # Sistema: Siempre actualizar workflow de evaluación
-            echo "  🔧 Actualizando sistema..."
-            if [ -f "../.github/workflows/grade-kata.yml" ]; then
-              cp ../.github/workflows/grade-kata.yml .github/workflows/ 2>/dev/null || true
-              SYNC_CHANGES=1
-            fi
-            
-            # ⚠️ IMPORTANTE: server-tests NO se copian por seguridad
-            # Los server-tests se descargan desde el template durante la evaluación
-            # Esto previene que estudiantes vean las pruebas completas
-            
-            # 🧹 LIMPIAR ARCHIVOS ADMINISTRATIVOS (según .adminignore)
+
+            # 🧹 LIMPIAR ARCHIVOS ADMINISTRATIVOS (excepto kata-templates)
             echo "  🧹 Eliminando archivos administrativos..."
             CLEANED_COUNT=0
-            
-            # Archivos a eliminar en la raíz
+
             for admin_file in .adminignore; do
               if [ -f "$admin_file" ]; then
-                echo "    🗑️  Eliminando: $admin_file"
                 rm -f "$admin_file"
                 CLEANED_COUNT=$((CLEANED_COUNT + 1))
               fi
             done
-            
-            # Carpetas administrativas en .github/
-            for admin_dir in .github/kata-templates .github/server-tests; do
-              if [ -d "$admin_dir" ]; then
-                echo "    🗑️  Eliminando carpeta: $admin_dir"
-                rm -rf "$admin_dir"
-                CLEANED_COUNT=$((CLEANED_COUNT + 1))
-              fi
-            done
-            
-            # Eliminar workflow de sincronización (solo instructores)
+
+            # Solo eliminar server-tests (NO kata-templates)
+            if [ -d ".github/server-tests" ]; then
+              rm -rf ".github/server-tests"
+              CLEANED_COUNT=$((CLEANED_COUNT + 1))
+            fi
+
             if [ -f ".github/workflows/sync-to-students.yml" ]; then
-              echo "    🗑️  Eliminando workflow de sincronización"
               rm -f ".github/workflows/sync-to-students.yml"
               CLEANED_COUNT=$((CLEANED_COUNT + 1))
             fi
-            
+
             echo "    ✅ Limpiados $CLEANED_COUNT archivos/carpetas administrativos"
-            
-            # Verificar si hay cambios reales después de las operaciones
+
+            # Verificar si hay cambios reales
             git add . 2>/dev/null || true
-            
+
             if git diff --cached --quiet; then
-              echo "  ℹ️  Sin cambios reales en el repositorio (template ya actualizado)"
+              echo "  ℹ️  Sin cambios reales (template ya actualizado)"
               cd ..
               continue
             fi
-            
+
             echo "  📝 Cambios detectados - procediendo con commit"
-            
-            # Commit y push directo a master (sin PR) - git add ya se hizo arriba
-            git commit -m "🔧 Auto-sync: Template actualizado automáticamente - Haz git pull para obtener actualizaciones"
-            
-            # Pull primero para evitar conflictos, luego push
-            if git pull --rebase origin master 2>/dev/null || git pull origin master 2>/dev/null; then
-              if git push origin master; then
-                echo "  ✅ Sincronización automática completada"
+
+            git commit -m "🔧 Auto-sync: Kata-$CURRENT_KATA actualizada desde template"
+
+            # Detectar rama principal
+            DEFAULT_BRANCH=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@' || echo "master")
+
+            if git pull --rebase origin "$DEFAULT_BRANCH" 2>/dev/null || git pull origin "$DEFAULT_BRANCH" 2>/dev/null; then
+              if git push origin "$DEFAULT_BRANCH"; then
+                echo "  ✅ Sincronización completada"
                 SUCCESS=$((SUCCESS + 1))
               else
-                echo "  ❌ Error en push a master"
+                echo "  ❌ Error en push"
                 FAILED=$((FAILED + 1))
               fi
             else
               echo "  ❌ Error en pull - posible conflicto"
               FAILED=$((FAILED + 1))
             fi
-            
+
             cd ..
           done < student_repos.txt
-          
+
           echo ""
           echo "📊 Resultado: $SUCCESS exitosos, $FAILED fallidos"
 
