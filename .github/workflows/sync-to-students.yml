@@ -1,6 +1,17 @@
 name: 🔄 Auto-Sync Template to Students
 
 on:
+  # Disparar automáticamente cuando hay cambios en katas o templates
+  push:
+    branches:
+      - master
+      - main
+    paths:
+      - 'katas/**'
+      - '.github/kata-templates/**'
+      - '.github/workflows/grade-kata.yml'
+
+  # También permitir ejecución manual
   workflow_dispatch:
     inputs:
       assignment_prefix:
@@ -10,13 +21,25 @@ on:
       dry_run:
         description: 'Solo mostrar repos (no hacer cambios)'
         type: boolean
-        default: true
+        default: false
 
 jobs:
   sync:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: 📋 Show trigger info
+        run: |
+          echo "🚀 Sync triggered by: ${{ github.event_name }}"
+          if [ "${{ github.event_name }}" == "push" ]; then
+            echo "📝 Commit: ${{ github.sha }}"
+            echo "👤 Author: ${{ github.actor }}"
+            echo "📂 Changes detected in template - auto-syncing to all student repos"
+          else
+            echo "🖱️ Manual trigger by: ${{ github.actor }}"
+            echo "🔍 Dry run: ${{ inputs.dry_run }}"
+          fi
 
       - name: 🔧 Setup GitHub CLI with PAT
         run: |
@@ -46,7 +69,7 @@ jobs:
           echo "total=$TOTAL" >> $GITHUB_OUTPUT
 
       - name: 📋 Show repos (dry run)
-        if: inputs.dry_run
+        if: github.event_name == 'workflow_dispatch' && inputs.dry_run == true
         run: |
           echo "🔍 DRY RUN - Repos que serían sincronizados:"
           echo "==========================================="
@@ -57,7 +80,7 @@ jobs:
           echo "📊 Total: ${{ steps.find.outputs.total }} repositorios"
 
       - name: 📤 Auto Sync
-        if: inputs.dry_run == false
+        if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.dry_run == false)
         env:
           PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
         run: |
